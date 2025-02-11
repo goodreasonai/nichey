@@ -1,0 +1,6 @@
+**/.DS_Store
+**/.env
+**/__pycache__
+venv
+user
+**/*.egg-info
