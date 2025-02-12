@@ -5,7 +5,9 @@ setup(
     version='0.1',
     packages=find_packages(),
     install_requires=[
+        'requests',
         'openai',
+        'pydantic'
     ],
     author='Gordon Kamer',
     author_email='gordon@goodreason.ai',
