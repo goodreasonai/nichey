@@ -10,6 +10,8 @@ OPENAI_API_KEY="..."
 BING_API_KEY="..."
 ```
 
+In order to run tests that involve a ScrapeServ server, you'll need to run that server at `http://localhost:5006`.
+
 `pytest` is invoked like:
 
 ```
