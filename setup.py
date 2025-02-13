@@ -2,12 +2,14 @@ from setuptools import setup, find_packages
 
 setup(
     name='wiki',
-    version='0.1',
+    version='0.0.1',
     packages=find_packages(),
     install_requires=[
         'requests',
         'openai',
-        'pydantic'
+        'pydantic',
+        'beautifulsoup4',
+        'requests-toolbelt'
     ],
     author='Gordon Kamer',
     author_email='gordon@goodreason.ai',

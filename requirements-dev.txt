@@ -1,1 +1,3 @@
 setuptools
+python-dotenv
+pytest

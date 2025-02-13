@@ -22,7 +22,7 @@ class OpenAILM(LM):
         self.model = model
         self.client = OpenAI(
             base_url=base_url,
-            api_key=api_key or os.environ.get("OPENAI_API_KEY"),
+            api_key=api_key,
         )
         super().__init__(max_input_tokens, accepts_images)
 
