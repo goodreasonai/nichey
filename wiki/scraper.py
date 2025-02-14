@@ -201,7 +201,6 @@ class ScrapeServ(Scraper):
         self.api_key = api_key
 
     def scrape(self, url):
-
         headers = {
             'Authorization': f'Bearer {self.api_key}'
         }

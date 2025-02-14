@@ -1,9 +1,10 @@
 from sqlalchemy import create_engine, Engine
 from sqlalchemy.orm import sessionmaker
 from contextlib import contextmanager
-from .db import Base, Source, WEBPAGE
+from .db import Base, Source, WebSource, SourceData, SourcePrimaryData, SourceScreenshot
 from .scraper import Scraper, ScrapeResponse
 from .search_engine import WebLink
+import os
 
 
 class Wiki():
@@ -11,7 +12,7 @@ class Wiki():
     topic: str
     path: str
     _engine: Engine
-    def __init__(self, title=None, topic=None, path=None):
+    def __init__(self, title=None, topic=None, path=None, replace=False):
         self.title = title
         self.topic = topic
         if path is None:
@@ -19,6 +20,9 @@ class Wiki():
         else:
             # TODO: auto populate title / topic, other things
             self.path = path
+        
+        if replace:
+            os.remove(self.path)
 
         # For a file-based database
         self._engine = create_engine(f'sqlite:///{self.path}')
@@ -47,33 +51,75 @@ class Wiki():
         self.topic = topic
 
 
-    # Should also add source data
-    def add_source(self, type, title, link, snippet=None, query=None, search_engine=None):
+    def get_sources(self, limit=100, offset=0, **kwargs) -> list[Source]:
         with self._get_session() as session:
-            new_source = Source(
-                type=type,
-                title=title,
-                link=link,
-                snippet=snippet,
-                query=query,
-                search_engine=search_engine
-            )
-            session.add(new_source)
-
-    def get_sources(self, limit=100, offset=0) -> list[Source]:
+            sources = session.query(Source).filter_by(**kwargs).limit(limit).offset(offset).all()
+            return sources
+    
+    def get_source_primary_data(self, source_id) -> SourcePrimaryData:
         with self._get_session() as session:
-            sources = session.query(Source).limit(limit).offset(offset).all()
+            source = session.query(SourcePrimaryData).filter_by(source_id=source_id).first()
+            return source
+    
+    def get_source_screenshots(self, source_id) -> list[SourceScreenshot]:
+        with self._get_session() as session:
+            sources = session.query(SourceScreenshot).filter_by(source_id=source_id).all()
             return sources
 
     # Scrapes and stores info in the db
     def scrape_web_results(self, scraper: Scraper, results: list[WebLink]):
         for res in results:
             resp: ScrapeResponse = scraper.scrape(res.url)
-            self.add_source(
-                type=WEBPAGE,
-                title=resp.metadata.title,
-                link=resp.url,
-                query=res.query,
-                search_engine=res.search_engine
-            )
-            # TODO add source data as well
+
+            with self._get_session() as session:
+                new_source = WebSource(
+                    title=resp.metadata.title,
+                    url=resp.url,
+                    snippet=res.snippet,
+                    query=res.query,
+                    search_engine=res.search_engine
+                )
+
+                session.add(new_source)
+                session.flush()  # Get the new_source ID before committing
+
+                with resp.consume_data() as path:
+                    with open(path, 'rb') as f:
+                        file_data = f.read()
+            
+                    primary_data = SourcePrimaryData(
+                        mimetype=resp.metadata.content_type,
+                        data=file_data,
+                        source_id=new_source.id,
+                        text=None  # TODO
+                    )
+                    session.add(primary_data)
+
+                with resp.consume_screenshots() as (ss_paths, ss_mimetypes):
+                    ss_paths: list[str]
+                    ss_mimetypes: list[str]
+                    for i, (ss_path, ss_mimetype) in enumerate(zip(ss_paths, ss_mimetypes)):
+                        with open(ss_path, 'rb') as f:
+                            ss_data = f.read()
+                        
+                        screenshot = SourceScreenshot(
+                            mimetype=ss_mimetype,
+                            data=ss_data,
+                            source_id=new_source.id,
+                            order=i
+                        )
+                        session.add(screenshot)
+                    
+
+    def make_entities(self, lm):
+        # Go through sources
+        while True:
+            sources = self.get_sources(are_entities_extracted=False)
+
+            for src in sources:
+                src: Source
+                primary_data = self.get_source_primary_data(src.id)
+                # TODO
+
+            if not len(sources):
+                break
