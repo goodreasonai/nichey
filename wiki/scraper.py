@@ -3,7 +3,6 @@ import os
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from requests_toolbelt.multipart.decoder import MultipartDecoder
-import mimetypes
 from .utils import get_mime_type_from_headers, guess_filename_from_url, get_filename_from_headers
 from requests.structures import CaseInsensitiveDict
 import requests
@@ -73,18 +72,15 @@ class ScrapeResponse():
     def _determine_content_type(self):
         meta = ScrapeMetadata()
         meta.content_type = get_mime_type_from_headers(self.headers)
-        extensions = mimetypes.guess_all_extensions(meta.content_type)
-        if len(extensions):
-            ext = extensions[0]
-            # If it's HTML, we'll get it from the <title> tag, so we don't have to do this here
-            if meta.content_type != 'text/html':
-                filename = get_filename_from_headers(self.headers)
-                if filename:
-                    meta.title = filename
-                else:
-                    guessed_filename = guess_filename_from_url(self.url, ext)
-                    if guessed_filename:
-                        meta.title = guessed_filename
+        # If it's HTML, we'll get it from the <title> tag, so we don't have to do this here
+        if meta.content_type != 'text/html':
+            filename = get_filename_from_headers(self.headers)
+            if filename:
+                meta.title = filename
+            else:
+                guessed_filename = guess_filename_from_url(self.url)
+                if guessed_filename:
+                    meta.title = guessed_filename
         self.metadata = meta
 
     def _set_metadata_from_html(self, content):
@@ -172,17 +168,26 @@ class ScrapeResponse():
         self.screenshot_mimetypes = []
         return ScrapeScreenshotConsumer(these_paths, these_types)
 
+    def close(self):
+        cleaned = 0
+        if self.data_path and os.path.exists(self.data_path):
+            os.remove(self.data_path)
+            cleaned += 1
+        if len(self.screenshot_paths):
+            print(f"Scrape response screnshots being removed in garbage collection; this is a sign of buggy code. Scraped URL was '{self.url}'.")
+            for ss in self.screenshot_paths:
+                if os.path.exists(ss):
+                    os.remove(ss)
+                    cleaned += 1
+        return cleaned
+
     def __del__(self):
         # Ensure the temporary file is deleted when the object is destroyed
         try:
-            if self.data_path and os.path.exists(self.data_path):
-                print(f"Scrape response data being removed in garbage collection; this is a sign of buggy code. Scraped URL was '{self.url}'.")
-                os.remove(self.data_path)
-            if len(self.screenshot_paths):
-                print(f"Scrape response screnshots being removed in garbage collection; this is a sign of buggy code. Scraped URL was '{self.url}'.")
-                for ss in self.screenshot_paths:
-                    if os.path.exists(ss):
-                        os.remove(ss)
+            cleaned = self.close()
+            if cleaned:
+                print(f"{cleaned} Scrape response data items being removed in garbage collection; this is a sign of buggy code. Scraped URL was '{self.url}'.")
+
         except Exception as e:
             print(f"Error cleaning up ScrapeResponse for '{self.url}' during object deletion: {e}")
 

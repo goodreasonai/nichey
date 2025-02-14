@@ -4,7 +4,10 @@ from contextlib import contextmanager
 from .db import Base, Source, WebSource, SourceData, SourcePrimaryData, SourceScreenshot
 from .scraper import Scraper, ScrapeResponse
 from .search_engine import WebLink
+from .file_loaders import get_loader, FileLoader, RawChunk, TextSplitter
+from .utils import get_ext_from_mime_type
 import os
+import sys
 
 
 class Wiki():
@@ -84,31 +87,48 @@ class Wiki():
                 session.flush()  # Get the new_source ID before committing
 
                 with resp.consume_data() as path:
-                    with open(path, 'rb') as f:
-                        file_data = f.read()
-            
-                    primary_data = SourcePrimaryData(
-                        mimetype=resp.metadata.content_type,
-                        data=file_data,
-                        source_id=new_source.id,
-                        text=None  # TODO
-                    )
-                    session.add(primary_data)
+                    with resp.consume_screenshots() as (ss_paths, ss_mimetypes):
+                        ext = get_ext_from_mime_type(resp.metadata.content_type)
+                        loader: FileLoader = get_loader(ext, path)
+                        if not loader:
+                            print(f"Filetype '{resp.metadata.content_type}' cannot be parsed; moving along.", file=sys.stderr)
+                            continue  # By exiting both consumes, they are automatically cleaned up
 
-                with resp.consume_screenshots() as (ss_paths, ss_mimetypes):
-                    ss_paths: list[str]
-                    ss_mimetypes: list[str]
-                    for i, (ss_path, ss_mimetype) in enumerate(zip(ss_paths, ss_mimetypes)):
-                        with open(ss_path, 'rb') as f:
-                            ss_data = f.read()
-                        
-                        screenshot = SourceScreenshot(
-                            mimetype=ss_mimetype,
-                            data=ss_data,
+                        # This section takes up a lot of memory - copying both the text and file data to move it over to the database.
+                        # There should be a better way.
+
+                        txt = ""
+                        splitter = TextSplitter()
+                        for chunk in loader.load_and_split(splitter):
+                            chunk: RawChunk
+                            txt += chunk.page_content
+
+                        with open(path, 'rb') as f:
+                            file_data = f.read()
+
+                        primary_data = SourcePrimaryData(
+                            mimetype=resp.metadata.content_type,
+                            data=file_data,
                             source_id=new_source.id,
-                            order=i
+                            text=txt
                         )
-                        session.add(screenshot)
+                        session.add(primary_data)
+
+                        print(primary_data)
+
+                        ss_paths: list[str]
+                        ss_mimetypes: list[str]
+                        for i, (ss_path, ss_mimetype) in enumerate(zip(ss_paths, ss_mimetypes)):
+                            with open(ss_path, 'rb') as f:
+                                ss_data = f.read()
+                            
+                            screenshot = SourceScreenshot(
+                                mimetype=ss_mimetype,
+                                data=ss_data,
+                                source_id=new_source.id,
+                                order=i
+                            )
+                            session.add(screenshot)
                     
 
     def make_entities(self, lm):
@@ -119,7 +139,10 @@ class Wiki():
             for src in sources:
                 src: Source
                 primary_data = self.get_source_primary_data(src.id)
-                # TODO
+                text = primary_data.text
+                if text:
+                    # TODO write prompt
+                    pass
 
             if not len(sources):
                 break
