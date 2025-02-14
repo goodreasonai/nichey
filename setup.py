@@ -9,7 +9,8 @@ setup(
         'openai',
         'pydantic',
         'beautifulsoup4',
-        'requests-toolbelt'
+        'requests-toolbelt',
+        'sqlalchemy'
     ],
     author='Gordon Kamer',
     author_email='gordon@goodreason.ai',

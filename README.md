@@ -16,3 +16,5 @@ Install the package in edit mode:
 ```
 python3 -m pip install -e .
 ```
+
+For testing, see [here](tests/README.md).

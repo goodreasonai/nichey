@@ -5,20 +5,18 @@ from pydantic import BaseModel
 
 
 class WebLink():
-    name: str
-    url: str
-    language: str  # A code, like en
-    snippet: str
-    def __init__(self, url, name="", language="", snippet="") -> None:
+    def __init__(self, url, name="", language="", snippet="", query="", search_engine="") -> None:
         self.url = url
         self.name = name
         self.language = language
         self.snippet = snippet
+        self.query = query
+        self.search_engine = search_engine
 
 
 class SearchEngine():
-    def __init__(self):
-        pass
+    def __init__(self, code):
+        self.code = code
     
     # Returns tuple (list[WebLink], total: int)
     # The total includes hits not returned (so, it could be like 1 million or something)
@@ -62,6 +60,7 @@ class Bing(SearchEngine):
     def __init__(self, api_key, market='en-US'):
         self.api_key = api_key
         self.market = market
+        super().__init__('bing')
 
     def search(self, query, max_n=10, offset=0):
         endpoint = "https://api.bing.microsoft.com/v7.0/search"
@@ -79,5 +78,16 @@ class Bing(SearchEngine):
             print(f"Could not get web pages from search engine. Here was the repsonse: {my_json}", file=sys.stderr)
             return []
         
-        results = [WebLink(x['url'], x['name'], language=x['language'], snippet=x['snippet']) for i, x in enumerate(raw_results) if i < max_n]
+        results = []
+        for i, x in enumerate(raw_results):
+            if i >= max_n:
+                break
+            results.append(WebLink(
+                x['url'],
+                x['name'],
+                language=x['language'],
+                snippet=x['snippet'],
+                query=query,
+                search_engine=self.code
+            ))
         return results, total
