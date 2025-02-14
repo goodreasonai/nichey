@@ -2,6 +2,7 @@ from urllib.parse import urlparse
 import os
 from requests.structures import CaseInsensitiveDict
 import mimetypes
+import tiktoken
 
 
 def get_mime_type_from_headers(headers: CaseInsensitiveDict):
@@ -46,3 +47,8 @@ def get_ext_from_mime_type(mimetype):
             return with_dot[1:]
         return with_dot
     return None
+
+tokenizer = tiktoken.get_encoding("gpt2")  # GPT2 tokenizer is also used for GPT-3, and maybe GPT-4?
+def get_token_estimate(txt):
+    tokens = tokenizer.encode(txt)
+    return len(tokens)

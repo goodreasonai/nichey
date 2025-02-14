@@ -12,7 +12,9 @@ setup(
         'requests-toolbelt',
         'sqlalchemy',
         'unstructured[csv,doc,docx,epub,md,msg,odt,org,ppt,pptx,rtf,rst,tsv,xlsx]',
-        'pymupdf'
+        'pymupdf',
+        'tiktoken',
+        'python-slugify'
     ],
     author='Gordon Kamer',
     author_email='gordon@goodreason.ai',

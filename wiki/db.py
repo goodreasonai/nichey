@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, String, Sequence, DateTime, func, Boolean, ForeignKey, LargeBinary, Text, UniqueConstraint
-from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy import Column, Integer, String, Sequence, DateTime, func, Boolean, ForeignKey, LargeBinary, Text
+from sqlalchemy.orm import DeclarativeBase
 
 class Base(DeclarativeBase):
     pass
@@ -63,3 +63,28 @@ class SourceScreenshot(SourceData):
 
     __mapper_args__ = {'polymorphic_identity': 'source_screenshot'}
 
+
+ENTITY_TYPES = ["person", "place", "organization", "event", "publication", "law", "product", "object", "concept"]
+# Parent to web source
+class Entity(Base):
+    __tablename__ = 'entity'
+    id = Column(Integer, Sequence('entity_id'), primary_key=True)
+    slug = Column(String(255), unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+    title = Column(String)
+    type = Column(String)
+    desc = Column(Text)
+    is_written = Column(Boolean)
+    markdown = Column(Text)
+
+
+class Reference(Base):
+    __tablename__ = 'reference'
+    id = Column(Integer, primary_key=True)
+    source_id = Column(Integer, 
+                      ForeignKey('source.id', ondelete="CASCADE"),
+                      nullable=False)
+    
+    entity_id = Column(Integer, 
+                      ForeignKey('entity.id', ondelete="CASCADE"),
+                      nullable=False)
