@@ -1,5 +1,7 @@
 from sqlalchemy import Column, Integer, String, Sequence, DateTime, func, Boolean, ForeignKey, LargeBinary, Text
 from sqlalchemy.orm import DeclarativeBase
+from dataclasses import dataclass
+
 
 class Base(DeclarativeBase):
     pass

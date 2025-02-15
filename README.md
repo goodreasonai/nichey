@@ -19,3 +19,5 @@ python3 -m pip install -e .
 ```
 
 For testing, see [here](tests/README.md).
+
+If you want to work on the frontend, see [here](frontend/README.md).

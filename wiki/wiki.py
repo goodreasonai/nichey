@@ -225,3 +225,8 @@ class Wiki():
 
             if not len(sources):
                 break
+
+    def serve(self):
+        from .server import Server  # Avoid circular imports
+        serv = Server(self)
+        serv.run()

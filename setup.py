@@ -14,7 +14,9 @@ setup(
         'unstructured[csv,doc,docx,epub,md,msg,odt,org,ppt,pptx,rtf,rst,tsv,xlsx]',
         'pymupdf',
         'tiktoken',
-        'python-slugify'
+        'python-slugify',
+        'flask',
+        'flask_cors'
     ],
     author='Gordon Kamer',
     author_email='gordon@goodreason.ai',
