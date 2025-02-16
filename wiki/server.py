@@ -1,7 +1,9 @@
-from flask import Flask, send_from_directory, jsonify
+from flask import Flask, send_from_directory, jsonify, request
 import os
 from .wiki import Wiki
 from flask_cors import cross_origin
+from .db import Entity
+from slugify import slugify
 
 
 class Server():
@@ -23,13 +25,33 @@ class Server():
         @self.app.route('/api/index', methods=('GET',))
         @cross_origin()
         def api_index():
-            entities = self.wiki.get_entities()
+            entities = self.wiki.get_entities(order_by=Entity.title)
             data = {
                 'entities': [{
                     'title': ent.title,
                     'desc': ent.desc,
-                    'slug': ent.slug
+                    'slug': ent.slug,
+                    'is_written': ent.is_written
                 } for ent in entities]
+            }
+            return jsonify(data)
+        
+        @self.app.route('/api/page', methods=('GET',))
+        @cross_origin()
+        def api_page():
+            entity_slug = request.args.get('slug')
+            entity_slug = slugify(entity_slug, max_length=255)
+            entities = self.wiki.get_entities(slug=entity_slug)
+            if not len(entities): 
+                return jsonify({'message': f'Entity with slug {entity_slug} not found'}), 404
+            ent = entities[0]
+            data = {
+                'entity': {
+                    'title': ent.title,
+                    'desc': ent.desc,
+                    'slug': ent.slug,
+                    'markdown': ent.markdown
+                }
             }
             return jsonify(data)
 

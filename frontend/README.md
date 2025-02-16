@@ -10,14 +10,14 @@ To build the frontend so that it's run with the package at port 5000, use `./bui
 
 ## How this was made
 
-This folder was bootstrapped with `create-next-app`. These options were used:
+This folder was bootstrapped with `npx create-next-app`. These options were used:
 
 ```
 TypeScript: No
 ESLint: No
 Tailwind CSS: No
 src/ directory: Yes
-App Router: Yes
+App Router: No
 Turbopack: Yes
 Custom alias: No
 ```

@@ -1,0 +1,26 @@
+
+.article p, .article h1, .article h2, .article h3, .article ul, .article ol {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    line-height: 1.5rem;
+}
+
+.article > p:first-child {
+    margin-top: 0px;
+}
+
+.article > p:last-child {
+    margin-bottom: 0px;
+}
+
+.article ol, .article ul, .editorArticle ol, .editorArticle ul {
+    padding-left: 1.5em;
+}
+
+.article li {
+    margin-top: 10px;
+}
+
+.article ul p, .article li p, .article ol p {
+    display: inline;
+}

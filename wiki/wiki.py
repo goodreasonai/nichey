@@ -64,11 +64,15 @@ class Wiki():
             sources = session.query(Source).filter_by(**kwargs).limit(limit).offset(offset).all()
             return sources
         
-    def get_entities(self, limit=100, offset=0, **kwargs) -> list[Entity]:
+    def get_entities(self, limit=100, offset=0, order_by=None, **kwargs) -> list[Entity]:
         with self._get_session() as session:
-            entities = session.query(Entity).filter_by(**kwargs).limit(limit).offset(offset).all()
+            entities = session.query(Entity).filter_by(**kwargs).order_by(order_by).limit(limit).offset(offset).all()
             return entities
     
+    def mark_all_unwritten(self):
+        with self._get_session() as session:
+            session.query(Entity).update({Entity.is_written: False})
+
     def get_source_primary_data(self, source_id) -> SourcePrimaryData:
         with self._get_session() as session:
             source = session.query(SourcePrimaryData).filter_by(source_id=source_id).first()
@@ -80,10 +84,12 @@ class Wiki():
             return sources
 
     # Scrapes and stores info in the db
-    def scrape_web_results(self, scraper: Scraper, results: list[WebLink]):
+    def scrape_web_results(self, scraper: Scraper, results: list[WebLink]) -> Generator[WebLink]:
         for res in results:
             resp: ScrapeResponse = scraper.scrape(res.url)
-
+            if not resp.success:
+                print(f"Failed to scrape {res.url}; moving on.", file=sys.stderr)
+                continue
             with self._get_session() as session:
                 new_source = WebSource(
                     title=resp.metadata.title,
@@ -137,6 +143,8 @@ class Wiki():
                                 order=i
                             )
                             session.add(screenshot)
+                
+                yield res
                     
 
     def make_entities(self, lm: LM) -> Generator[Tuple[List[Entity], Source]]:
@@ -199,6 +207,11 @@ class Wiki():
                                 existing = session.query(Entity).filter_by(slug=slug).first()
                                 if existing:
                                     print(f"Duplicate entity found for {slug}; not re-adding.", file=sys.stderr)
+                                    new_reference = Reference(
+                                        source_id=src.id,
+                                        entity_id=existing.id
+                                    )
+                                    session.add(new_reference)
                                 else:
                                     new_entity = Entity(
                                         type=ent.type,
@@ -218,13 +231,76 @@ class Wiki():
                         session.commit()
                         yield (made_entities, src)
 
-                    except Exception as e:
+                    except:
                         print(traceback.format_exc())
                         print(f"An exception occurred trying to parse entities of source with id {src.id}. Moving on.", file=sys.stderr)
                         offset += 1
 
-            if not len(sources):
-                break
+
+    def write(self, lm: LM, max_n=None, rewrite=False) -> Generator[Entity]:
+        all_entity_text = ""
+        with self._get_session() as session:
+            all_entities = session.query(Entity).all()
+            all_entities_info = [(x.title, x.slug) for x in all_entities]
+            all_entity_text = "\n".join([f"[{x[0]}]({x[1]})" for x in all_entities_info])
+
+        n = 0
+        with self._get_session() as session:
+            if rewrite:
+                entities = session.query(Entity).all()
+            else:
+                entities = session.query(Entity).filter_by(is_written=False).all()
+            for ent in entities:
+                ent: Entity
+
+                # Do a text search and also get direct references
+                matching_sources: list[SourcePrimaryData] = session.query(SourcePrimaryData).filter(
+                    SourcePrimaryData.text.ilike(f'%{ent.title}%')
+                ).all()
+
+                direct_sources: list[SourcePrimaryData] = session.query(SourcePrimaryData).join(
+                    Reference, SourcePrimaryData.source_id == Reference.source_id
+                ).filter(
+                    Reference.entity_id == ent.id
+                ).all()
+                
+                combined = matching_sources
+                matching_ids = [x.id for x in matching_sources]
+                for src in direct_sources:
+                    if src.id not in matching_ids:
+                        combined.append(src)
+
+                if not len(combined):
+                    print(f"No matching sources found for entity {ent.title}; moving on.", file=sys.stderr)
+                    continue
+                try:
+                    intro = "You are tasked with writing a full wiki entry for some entity. The user will specify the page you are writing. You **must** write in well-formatted markdown."
+                    links = "You can specify a link to another entry like: [[slug | Title]]. Whenever you mention some other entity, you should probably use a link. Here are all the entries in the wiki for your reference:"
+                    all_entity_text = all_entity_text
+                    source_instruct = "Below are sources from which you can draw material for your wiki entry. **Use only these sources for the information in your entry. You may not draw from any other outside information you may have.**"
+                    source_text = "\n\n".join([f"<START OF SOURCE>\n{data.text}\n</END OF SOURCE>" for data in combined])
+                    conclusion = "Now the user will specify which wiki page you are tasked with writing."
+                    system = "\n\n".join([intro, links, all_entity_text, source_instruct, source_text, conclusion])
+
+                    user_prompt_intro = f"You are writing the wiki entry for {ent.title} ({ent.slug})."
+                    user_prompt_disambiguation = f"A brief description of this entity for disambiguration: {ent.desc}"
+                    prompt = "\n".join([user_prompt_intro, user_prompt_disambiguation])
+                    lm_resp: LMResponse = lm.run(prompt, system, [])
+                    new_markdown = lm_resp.text
+                    # Actually effects a change in the db
+                    ent.markdown = new_markdown
+                    ent.is_written = True
+                    session.commit()
+                    session.flush()
+
+                except:
+                    print(traceback.format_exc())
+                    print(f"An exception occurred trying to write entry for {ent.slug}. Moving on.", file=sys.stderr)
+
+                yield ent
+                n += 1
+                if max_n is not None and n >= max_n:
+                    break
 
     def serve(self):
         from .server import Server  # Avoid circular imports

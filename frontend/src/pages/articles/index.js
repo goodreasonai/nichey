@@ -1,10 +1,20 @@
-"use client";
+import { useState, useEffect, useMemo } from "react"
+import Link from "next/link"
+import { useNavBar } from "@/components/NavBar/NavBar"
 
-import { useEffect, useState } from "react";
-
-export default function Home() {
-
+export default function Articles() {
     const [entities, setEntities] = useState([])
+    const { setPath } = useNavBar()
+
+    useEffect(() => {
+        setPath([
+            {'href': {'pathname': `/articles`}, 'title': 'Articles'}
+        ])
+        return () => {
+            setPath([])
+        }
+    }, [])
+
     useEffect(() => {
         async function getEntities(){
             try {
@@ -26,12 +36,13 @@ export default function Home() {
     }, [])
 
     return (
-        <div>
-            <div>
-                Hello!
-            </div>
+        <div style={{'display': 'flex', 'flexDirection': 'column'}}>
             {entities.map((ent) => {
-                return (
+                return ent.is_written ? (
+                    <div key={ent.slug}>
+                        <Link href={{'pathname': `/article`, 'query': { 'e': ent.slug }}}>{ent.title}</Link>
+                    </div>
+                ) : (
                     <div key={ent.slug}>
                         {ent.title}
                     </div>

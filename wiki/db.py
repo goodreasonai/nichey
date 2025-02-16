@@ -76,7 +76,7 @@ class Entity(Base):
     title = Column(String)
     type = Column(String)
     desc = Column(Text)
-    is_written = Column(Boolean)
+    is_written = Column(Boolean, default=False)
     markdown = Column(Text)
 
 

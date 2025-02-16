@@ -1,0 +1,1 @@
+(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[336],{4262:(n,_,u)=>{(window.__NEXT_P=window.__NEXT_P||[]).push(["/404",function(){return u(99)}])},99:(n,_,u)=>{"use strict";u.r(_),u.d(_,{default:()=>r});var e=u(4848);function r(n){let{}=n;return(0,e.jsx)("div",{children:"404 - Not Found"})}}},n=>{var _=_=>n(n.s=_);n.O(0,[636,593,792],()=>_(4262)),_N_E=n.O()}]);
