@@ -17,6 +17,8 @@ class Server():
         @self.app.route('/', defaults={'path': ''})
         @self.app.route('/<path:path>')
         def serve_static_files(path):
+            if path != "" and not os.path.splitext(path)[1]:
+                path += '.html'
             if path != "" and os.path.exists(self.app.static_folder + '/' + path):
                 return send_from_directory(self.app.static_folder, path)
             else:
