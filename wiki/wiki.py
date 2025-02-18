@@ -13,6 +13,7 @@ from typing import Generator, Tuple, List
 import sqlite3
 from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import cross_origin
+import re
 
 
 class Wiki():
@@ -388,6 +389,36 @@ class Wiki():
             n += 1
             if max_n is not None and n >= max_n:
                 break
+
+
+    def export(self, dir="output", remove_cross_refs=True, remove_source_refs=True):
+        all_written_entities: list[Entity] = self._match_rows(Entity(is_written=True))
+        if not os.path.exists(dir):
+            os.mkdir(dir)
+        for ent in all_written_entities:
+            fname = f"{ent.slug}.md"
+            with open(os.path.join(dir, fname), 'w') as fhand:
+                markdown = ent.markdown
+
+                # Remove references / links if desired
+                pattern = r'\[\[\s*(.*?)\s*\]\]'
+                def replacer(match):
+                    content = match.group(1).strip()
+                    if content.startswith('@'):  # Case 1: References like [[ @25 ]]
+                        return '' if remove_source_refs else f'[[{content}]]'
+                    if '|' in content:  # Case 2: Cross links with [[ | ]] form
+                        if remove_cross_refs:
+                            # Keep only the right side (alias).
+                            parts = content.split('|', 1)
+                            return parts[1].strip()
+                        return f'[[{content}]]'
+                    else:
+                        return content if remove_cross_refs else f'[[{content}]]'
+
+                markdown = re.sub(pattern, replacer, markdown)
+
+                fhand.write(markdown)
+
 
     def serve(self):
         app = Flask(__name__, static_folder='static')
