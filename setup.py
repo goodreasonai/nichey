@@ -15,7 +15,8 @@ setup(
         'tiktoken',
         'python-slugify',
         'flask',
-        'flask_cors'
+        'flask_cors',
+        'tqdm'
     ],
     author='Gordon Kamer',
     author_email='gordon@goodreason.ai',

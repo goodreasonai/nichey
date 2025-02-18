@@ -2,6 +2,7 @@ import requests
 import sys
 from .lm import LM, LMResponse
 from pydantic import BaseModel
+from .logger import logger
 
 
 class WebLink():
@@ -75,7 +76,7 @@ class Bing(SearchEngine):
             total = my_json['webPages']['totalEstimatedMatches']
             raw_results = my_json['webPages']['value']
         except:
-            print(f"Could not get web pages from search engine. Here was the repsonse: {my_json}", file=sys.stderr)
+            logger.error(f"Could not get web pages from search engine. Here was the repsonse: {my_json}", file=sys.stderr)
             return []
         
         results = []

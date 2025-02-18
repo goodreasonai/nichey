@@ -8,6 +8,7 @@ from requests.structures import CaseInsensitiveDict
 import requests
 import json
 import sys
+from .logger import logger 
 
 
 class ScrapeMetadata():
@@ -174,7 +175,7 @@ class ScrapeResponse():
             os.remove(self.data_path)
             cleaned += 1
         if len(self.screenshot_paths):
-            print(f"Scrape response screnshots being removed in garbage collection; this is a sign of buggy code. Scraped URL was '{self.url}'.")
+            logger.debug(f"Scrape response screnshots being removed in garbage collection; this is a sign of buggy code. Scraped URL was '{self.url}'.")
             for ss in self.screenshot_paths:
                 if os.path.exists(ss):
                     os.remove(ss)
@@ -186,10 +187,10 @@ class ScrapeResponse():
         try:
             cleaned = self.close()
             if cleaned:
-                print(f"{cleaned} Scrape response data items being removed in garbage collection; this is a sign of buggy code. Scraped URL was '{self.url}'.")
+                logger.debug(f"{cleaned} Scrape response data items being removed in garbage collection; this is a sign of buggy code. Scraped URL was '{self.url}'.")
 
         except Exception as e:
-            print(f"Error cleaning up ScrapeResponse for '{self.url}' during object deletion: {e}")
+            logger.debug(f"Error cleaning up ScrapeResponse for '{self.url}' during object deletion: {e}")
 
 
 class Scraper():
@@ -241,9 +242,9 @@ class ScrapeServ(Scraper):
                 try:
                     my_json = e.response.json()
                     message = my_json['error']
-                    print(f"Error scraping: {message}", file=sys.stderr)
+                    logger.warning(f"Error scraping {url}: {message}")
                 except:
-                    print(e, file=sys.stderr)
+                    logger.warning(f"Error scraing {url}, couldn't parse error message ({e})")
             return ScrapeResponse(False, status=None, url=url, headers={})
 
 
@@ -269,7 +270,7 @@ class RequestsScraper(Scraper):
             return resp
 
         except requests.RequestException as e:
-            print(e, file=sys.stderr)
+            logger.warning(f"Couldn't scrape {url}: {e}")
             if e.response:
                 status_code = e.response.status_code
                 headers = e.response.headers

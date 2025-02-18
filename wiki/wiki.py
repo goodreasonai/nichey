@@ -14,6 +14,9 @@ import sqlite3
 from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import cross_origin
 import re
+from .logger import logger
+from tqdm import tqdm
+import logging
 
 
 class Wiki():
@@ -181,169 +184,164 @@ class Wiki():
         return self._match_row(Source(id=id))
 
     # Scrapes and stores info in the db
-    def scrape_web_results(self, scraper: Scraper, results: list[WebLink]) -> Generator[WebLink]:
-        for res in results:
+    def scrape_web_results(self, scraper: Scraper, results: list[WebLink], max_n=None):
+        total = min(len(results), max_n) if max_n is not None else len(results)
+        for i in tqdm(range(total), desc="Scraping", total=total):
+            res = results[i]
             resp: ScrapeResponse = scraper.scrape(res.url)
             if not resp.success:
-                print(f"Failed to scrape {res.url}; moving on.", file=sys.stderr)
-                continue
+                logger.warning(f"Failed to scrape {res.url}; moving on.")
+            else:
+                with resp.consume_data() as path:
+                    with resp.consume_screenshots() as (ss_paths, ss_mimetypes):
+                        ext = get_ext_from_mime_type(resp.metadata.content_type)
+                        loader: FileLoader = get_loader(ext, path)
+                        if not loader:
+                            logger.warning(f"Filetype '{resp.metadata.content_type}' cannot be parsed; moving along.")
+                        else:
+                            txt = ""
+                            splitter = TextSplitter()
+                            for chunk in loader.load_and_split(splitter):
+                                chunk: RawChunk
+                                txt += chunk.page_content
 
-            with resp.consume_data() as path:
-                with resp.consume_screenshots() as (ss_paths, ss_mimetypes):
-                    ext = get_ext_from_mime_type(resp.metadata.content_type)
-                    loader: FileLoader = get_loader(ext, path)
-                    if not loader:
-                        print(f"Filetype '{resp.metadata.content_type}' cannot be parsed; moving along.", file=sys.stderr)
-                        continue  # By exiting both consumes, they are automatically cleaned up
+                            with open(path, 'rb') as f:
+                                file_data = f.read()
 
-                    # This section takes up a lot of memory - copying both the text and file data to move it over to the database.
-                    # There should be a better way.
+                            new_source = Source(
+                                title=resp.metadata.title,
+                                text=txt,
+                                url=resp.url,
+                                snippet=res.snippet,
+                                query=res.query,
+                                search_engine=res.search_engine
+                            )
+                            new_source: Source = self._insert_row(new_source)
 
-                    txt = ""
-                    splitter = TextSplitter()
-                    for chunk in loader.load_and_split(splitter):
-                        chunk: RawChunk
-                        txt += chunk.page_content
+                            primary_data = PrimarySourceData(
+                                mimetype=resp.metadata.content_type,
+                                data=file_data,
+                                source_id=new_source.id,
+                            )
+                            self._insert_row(primary_data)
 
-                    with open(path, 'rb') as f:
-                        file_data = f.read()
-
-                    new_source = Source(
-                        title=resp.metadata.title,
-                        text=txt,
-                        url=resp.url,
-                        snippet=res.snippet,
-                        query=res.query,
-                        search_engine=res.search_engine
-                    )
-                    new_source: Source = self._insert_row(new_source)
-
-                    primary_data = PrimarySourceData(
-                        mimetype=resp.metadata.content_type,
-                        data=file_data,
-                        source_id=new_source.id,
-                    )
-                    self._insert_row(primary_data)
-
-                    ss_paths: list[str]
-                    ss_mimetypes: list[str]
-                    for i, (ss_path, ss_mimetype) in enumerate(zip(ss_paths, ss_mimetypes)):
-                        with open(ss_path, 'rb') as f:
-                            ss_data = f.read()
-                        
-                        screenshot = ScreenshotData(
-                            mimetype=ss_mimetype,
-                            data=ss_data,
-                            source_id=new_source.id,
-                            place=i
-                        )
-                        self._insert_row(screenshot)
+                            ss_paths: list[str]
+                            ss_mimetypes: list[str]
+                            for i, (ss_path, ss_mimetype) in enumerate(zip(ss_paths, ss_mimetypes)):
+                                with open(ss_path, 'rb') as f:
+                                    ss_data = f.read()
+                                
+                                screenshot = ScreenshotData(
+                                    mimetype=ss_mimetype,
+                                    data=ss_data,
+                                    source_id=new_source.id,
+                                    place=i
+                                )
+                                self._insert_row(screenshot)
             
             yield res
                     
 
     def make_entities(self, lm: LM) -> Generator[Tuple[List[Entity], Source]]:
         # Go through sources
-        offset = 0  # Gets incremeted on an error
-        while True:
-            sources = self._match_rows(Source(are_entities_extracted=False), limit=100, offset=offset)
-            if not len(sources):
-                break
-            for src in sources:
-                made_entities = []
-                try:
-                    src: Source
-                    text = src.text
-                    if text:
-                        not_entities = ["Countries", "Nouns unrelated to the research topic", "Very common nouns or words", "Well-known cities not especially significant to the research topic"]
-                        class EntityData(BaseModel):
-                            type: str
-                            title: str
-                            desc: str
+        sources = self._match_rows(Source(are_entities_extracted=False))
+        if not len(sources):
+            logger.warning("No sources found to make entities from.")
+        
+        total = len(sources)
+        for i in tqdm(range(total), total=total, desc="Extracting"):
+            src: Source = sources[i]
+            made_entities = []
+            try:
+                text = src.text
+                if text:
+                    not_entities = ["Countries", "Nouns unrelated to the research topic", "Very common nouns or words", "Well-known cities not especially significant to the research topic"]
+                    class EntityData(BaseModel):
+                        type: str
+                        title: str
+                        desc: str
 
-                        class Entities(BaseModel):
-                            entities: list[EntityData]
+                    class Entities(BaseModel):
+                        entities: list[EntityData]
 
-                        intro = "You are tasked with extracting relevant entities from the given source material into JSON. Here is the text extracted from the source material:"
+                    intro = "You are tasked with extracting relevant entities from the given source material into JSON. Here is the text extracted from the source material:"
 
-                        safe_token_length = get_safe_context_length(lm)                    
-                        token_tot = 0
-                        prompt_src_text = ""
-                        splitter = TextSplitter()
-                        for chunk_txt in splitter.split_text(text):
-                            if get_token_estimate(chunk_txt) + token_tot > safe_token_length:
-                                break
-                            prompt_src_text += chunk_txt
-                        
-                        wiki = "Each entity will become a custom Wiki article that the user is constructing based on his research topic."
-                        type_req = f"The entities/pages can be the following types: {', '.join(ENTITY_TYPES)}"
-                        neg_req = f"You should not make entities for the following categories, which don't count: {', '.join(not_entities)}"
-                        rel_req = "The user will provide the research topic. THE ENTITIES YOU EXTRACT MUST BE RELEVANT TO THE USER'S RESEARCH GOALS."
-                        format_req = "Use the appropriate JSON schema. Here is an example for an extraction for research involving the history of Bell Labs. In this case, we're assuming that the source material mentioned John Bardeen."
-                        example = '{"entities": [{"type": "person", "title": "John Bardeen", "desc": "John Bardeen, along with Walter Brattain and Bill Shockley, co-invented the transistor during his time as a physicist at Bell Labs."}, ...]}'
-                        example_cont = "For this example, you may also want to have included the transistor (object), The Invention of the Transistor (event), Walter Brattain (person), and Bill Shockley (person), assuming that all of these were actually mentioned in the source material."
-                        conclusion = "Now, read the user's research topic and extract the relevant entites from the source given above."
-                        system_prompt = "\n\n".join([intro, prompt_src_text, wiki, type_req, neg_req, rel_req, format_req, example, example_cont, conclusion])
-                        user_prompt = self.topic
+                    safe_token_length = get_safe_context_length(lm)                    
+                    token_tot = 0
+                    prompt_src_text = ""
+                    splitter = TextSplitter()
+                    for chunk_txt in splitter.split_text(text):
+                        if get_token_estimate(chunk_txt) + token_tot > safe_token_length:
+                            break
+                        prompt_src_text += chunk_txt
+                    
+                    wiki = "Each entity will become a custom Wiki article that the user is constructing based on his research topic."
+                    type_req = f"The entities/pages can be the following types: {', '.join(ENTITY_TYPES)}"
+                    neg_req = f"You should not make entities for the following categories, which don't count: {', '.join(not_entities)}"
+                    rel_req = "The user will provide the research topic. THE ENTITIES YOU EXTRACT MUST BE RELEVANT TO THE USER'S RESEARCH GOALS."
+                    format_req = "Use the appropriate JSON schema. Here is an example for an extraction for research involving the history of Bell Labs. In this case, we're assuming that the source material mentioned John Bardeen."
+                    example = '{"entities": [{"type": "person", "title": "John Bardeen", "desc": "John Bardeen, along with Walter Brattain and Bill Shockley, co-invented the transistor during his time as a physicist at Bell Labs."}, ...]}'
+                    example_cont = "For this example, you may also want to have included the transistor (object), The Invention of the Transistor (event), Walter Brattain (person), and Bill Shockley (person), assuming that all of these were actually mentioned in the source material."
+                    conclusion = "Now, read the user's research topic and extract the relevant entites from the source given above."
+                    system_prompt = "\n\n".join([intro, prompt_src_text, wiki, type_req, neg_req, rel_req, format_req, example, example_cont, conclusion])
+                    user_prompt = self.topic
 
-                        resp: LMResponse = lm.run(user_prompt, system_prompt, [], json_schema=Entities)
-                        entities: Entities = resp.parsed
+                    resp: LMResponse = lm.run(user_prompt, system_prompt, [], json_schema=Entities)
+                    entities: Entities = resp.parsed
 
-                        for ent in entities.entities:
-                            ent: EntityData
+                    for ent in entities.entities:
+                        ent: EntityData
 
-                            if ent.type not in ENTITY_TYPES:
-                                print(f"Extracted type '{ent.type}' not recognized (title was '{ent.title}', source was '{src.title}')", file=sys.stderr)
+                        if ent.type not in ENTITY_TYPES:
+                            logger.warning(f"Extracted type '{ent.type}' not recognized (title was '{ent.title}', source was '{src.title}')")
 
-                            slug = slugify(ent.title, max_length=255)  # 255 is the max length of the slug text in the database... may want to standardize this somewhere.
-                            # Check for duplicate
-                            existing = self.get_entity_by_slug(slug)
-                            if existing:
-                                print(f"Duplicate entity found for {slug}; not re-adding.", file=sys.stderr)
-                                new_reference = Reference(
-                                    source_id=src.id,
-                                    entity_id=existing.id
-                                )
-                                self._insert_row(new_reference)
-                            else:
-                                new_entity = Entity(
-                                    type=ent.type,
-                                    title=ent.title,
-                                    desc=ent.desc,
-                                    slug=slug
-                                )
-                                new_entity: Entity = self._insert_row(new_entity)
-                                made_entities.append(new_entity)
-                                new_reference = Reference(
-                                    source_id=src.id,
-                                    entity_id=new_entity.id
-                                )
-                                self._insert_row(new_reference)
-                    src.are_entities_extracted = True
-                    self._update_row(src)
-                    yield (made_entities, src)
+                        slug = slugify(ent.title, max_length=255)  # 255 is the max length of the slug text in the database... may want to standardize this somewhere.
+                        # Check for duplicate
+                        existing = self.get_entity_by_slug(slug)
+                        if existing:
+                            logger.debug(f"Duplicate entity found for {slug}; not re-adding.")
+                            new_reference = Reference(
+                                source_id=src.id,
+                                entity_id=existing.id
+                            )
+                            self._insert_row(new_reference)
+                        else:
+                            new_entity = Entity(
+                                type=ent.type,
+                                title=ent.title,
+                                desc=ent.desc,
+                                slug=slug
+                            )
+                            new_entity: Entity = self._insert_row(new_entity)
+                            made_entities.append(new_entity)
+                            new_reference = Reference(
+                                source_id=src.id,
+                                entity_id=new_entity.id
+                            )
+                            self._insert_row(new_reference)
+                src.are_entities_extracted = True
+                self._update_row(src)
 
-                except:
-                    print(traceback.format_exc())
-                    print(f"An exception occurred trying to parse entities of source with id {src.id}. Moving on.", file=sys.stderr)
-                    offset += 1
+            except:
+                logger.debug(traceback.format_exc())
+                logger.warning(f"An exception occurred trying to parse entities of source with id {src.id}. Moving on.")
 
 
-    def write(self, lm: LM, max_n=None, rewrite=False) -> Generator[Entity]:
+    def write(self, lm: LM, max_n=None, rewrite=False):
         all_entity_text = ""
         
         all_entities: list[Entity] = self.get_all_entities()
         all_entities_info = [(x.title, x.slug) for x in all_entities]
         all_entity_text = "\n".join([f"[{x[0]}]({x[1]})" for x in all_entities_info])
 
-        n = 0
         if rewrite:
             entities = list(all_entities)
         else:
             entities = self._match_rows(Entity(is_written=False))
         
-        for ent in entities:
-            ent: Entity
+        total = min(len(entities), max_n) if max_n is not None else len(entities)
+        for i in tqdm(range(total), desc="Writing", disable=logger.level > logging.INFO):
+            ent: Entity = entities[i]
 
             matching_sources = self.search_sources_by_text(ent.title)
             direct_sources = self.get_referenced_sources(entity_id=ent.id)
@@ -357,38 +355,32 @@ class Wiki():
 
             # Now 'sources' contains all the Source objects associated with the matched SourcePrimaryData
             if not len(combined):
-                print(f"No matching sources found for entity {ent.title}; moving on.", file=sys.stderr)
-                continue
+                logger.warning(f"No matching sources found for entity {ent.title}; moving on.")
+            else:
+                try:
+                    intro = "You are tasked with writing a full wiki entry for some entity. This wiki is not a general wiki; it is meant to fulfill the research goals set by the user. The user will specify the page you are writing. You **must** write in well-formatted markdown."
+                    links = "You can specify a link to another wiki entry like: [[slug | Title]]. Whenever you mention some other entity, you should probably use a link. Here are all the entries in the wiki for your reference:"
+                    all_entity_text = all_entity_text
+                    source_instruct = "Below are sources from which you can draw material for your wiki entry. **Use only these sources for the information in your entry. You may not draw from any other outside information you may have.**"
+                    source_text = "\n\n".join([f"<START OF SOURCE WITH ID {data.id}>\n{data.text}\n</END OF SOURCE WITH ID {data.id}>" for data in combined])
+                    references = "In order to cite a source using a footnote, use the syntax '[[@SOURCE_ID]]', with the @ sign. For example, a footnote to source with ID 15 would be [[@15]]. A link to the proper source will be automatically placed; DO NOT WRITE A FOOTNOTES OR REFERENCES SECTION. THEY WILL BE AUTOMATICALLY INCLUDED. WHENEVER YOU CITE A SOURCE (as opposed to another article) YOU MUST USE THE AT (@) SIGN."
+                    conclusion = "Now the user will specify which wiki page you are tasked with writing."
+                    system = "\n\n".join([intro, links, all_entity_text, source_instruct, source_text, references, conclusion])
 
-            try:
-                intro = "You are tasked with writing a full wiki entry for some entity. This wiki is not a general wiki; it is meant to fulfill the research goals set by the user. The user will specify the page you are writing. You **must** write in well-formatted markdown."
-                links = "You can specify a link to another wiki entry like: [[slug | Title]]. Whenever you mention some other entity, you should probably use a link. Here are all the entries in the wiki for your reference:"
-                all_entity_text = all_entity_text
-                source_instruct = "Below are sources from which you can draw material for your wiki entry. **Use only these sources for the information in your entry. You may not draw from any other outside information you may have.**"
-                source_text = "\n\n".join([f"<START OF SOURCE WITH ID {data.id}>\n{data.text}\n</END OF SOURCE WITH ID {data.id}>" for data in combined])
-                references = "In order to cite a source using a footnote, use the syntax '[[@SOURCE_ID]]', with the @ sign. For example, a footnote to source with ID 15 would be [[@15]]. A link to the proper source will be automatically placed; DO NOT WRITE A FOOTNOTES OR REFERENCES SECTION. THEY WILL BE AUTOMATICALLY INCLUDED. WHENEVER YOU CITE A SOURCE (as opposed to another article) YOU MUST USE THE AT (@) SIGN."
-                conclusion = "Now the user will specify which wiki page you are tasked with writing."
-                system = "\n\n".join([intro, links, all_entity_text, source_instruct, source_text, references, conclusion])
+                    user_prompt_intro = f"You are writing the wiki entry for {ent.title} ({ent.slug})."
+                    user_prompt_disambiguation = f"A brief description of this entity for disambiguation: {ent.desc}"
+                    user_prompt_topic = f"The goal of the wiki is to fulfill this research goal: {self.topic}"
+                    prompt = "\n".join([user_prompt_intro, user_prompt_disambiguation, user_prompt_topic])
+                    lm_resp: LMResponse = lm.run(prompt, system, [])
+                    new_markdown = lm_resp.text
+                    
+                    ent.markdown = new_markdown
+                    ent.is_written = True
+                    self._update_row(ent)
 
-                user_prompt_intro = f"You are writing the wiki entry for {ent.title} ({ent.slug})."
-                user_prompt_disambiguation = f"A brief description of this entity for disambiguation: {ent.desc}"
-                user_prompt_topic = f"The goal of the wiki is to fulfill this research goal: {self.topic}"
-                prompt = "\n".join([user_prompt_intro, user_prompt_disambiguation, user_prompt_topic])
-                lm_resp: LMResponse = lm.run(prompt, system, [])
-                new_markdown = lm_resp.text
-                
-                ent.markdown = new_markdown
-                ent.is_written = True
-                self._update_row(ent)
-
-            except:
-                print(traceback.format_exc())
-                print(f"An exception occurred trying to write entry for {ent.slug}. Moving on.", file=sys.stderr)
-
-            yield ent
-            n += 1
-            if max_n is not None and n >= max_n:
-                break
+                except:
+                    logger.debug(traceback.format_exc())
+                    logger.error(f"An exception occurred trying to write entry for {ent.slug}. Moving on.")
 
 
     def export(self, dir="output", remove_cross_refs=True, remove_source_refs=True):
