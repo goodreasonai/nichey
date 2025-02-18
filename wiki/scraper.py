@@ -88,27 +88,27 @@ class ScrapeResponse():
 
         # TITLE: Get title if exists
         if soup.title.string:
-            self.metadata.title = soup.title.string
+            self.metadata.title = soup.title.string.strip()
 
         # DESCRIPTION: Check the open graph description first, then meta description
         og_description = soup.find('meta', attrs={'property': 'og:description', 'content': True})
         if og_description:
-            self.metadata.desc = og_description['content']
+            self.metadata.desc = og_description['content'].strip()
         else:
             # Fallback to meta description
             meta_description = soup.find('meta', attrs={'name': 'description', 'content': True})
             if meta_description:
-                self.metadata.desc = meta_description['content']
+                self.metadata.desc = meta_description['content'].strip()
         
         # AUTHOR: Check Open Graph author first
         og_author = soup.find('meta', attrs={'property': 'og:author', 'content': True})
         if og_author:
-            self.metadata.author = og_author['content']
+            self.metadata.author = og_author['content'].strip()
         else:
             # Fallback to meta author if og:description not found
             meta_author = soup.find('meta', attrs={'name': 'author', 'content': True})
             if meta_author:
-                self.metadata.author = meta_author['content']
+                self.metadata.author = meta_author['content'].strip()
 
         # PREVIEW IMAGE
         og_image = soup.find('meta', attrs={'property': 'og:image', 'content': True})

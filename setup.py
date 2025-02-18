@@ -10,7 +10,6 @@ setup(
         'pydantic',
         'beautifulsoup4',
         'requests-toolbelt',
-        'sqlalchemy',
         'unstructured[csv,doc,docx,epub,md,msg,odt,org,ppt,pptx,rtf,rst,tsv,xlsx]',
         'pymupdf',
         'tiktoken',

@@ -2,8 +2,9 @@ from flask import Flask, send_from_directory, jsonify, request
 import os
 from .wiki import Wiki
 from flask_cors import cross_origin
-from .db import Entity
+from .db import Entity, Source
 from slugify import slugify
+from flask import g
 
 
 class Server():
@@ -27,7 +28,7 @@ class Server():
         @self.app.route('/api/index', methods=('GET',))
         @cross_origin()
         def api_index():
-            entities = self.wiki.get_entities(order_by=Entity.title)
+            entities = self.wiki.get_all_entities()
             data = {
                 'entities': [{
                     'title': ent.title,
@@ -38,21 +39,47 @@ class Server():
             }
             return jsonify(data)
         
+        @self.app.route('/api/sources', methods=('GET',))
+        @cross_origin()
+        def api_sources():
+            sources = self.wiki.get_all_sources()
+            data = {
+                'sources': [{
+                    'title': src.title,
+                    'id': src.id,
+                } for src in sources]
+            }
+            return jsonify(data)
+        
         @self.app.route('/api/page', methods=('GET',))
         @cross_origin()
         def api_page():
             entity_slug = request.args.get('slug')
             entity_slug = slugify(entity_slug, max_length=255)
-            entities = self.wiki.get_entities(slug=entity_slug)
-            if not len(entities): 
+            ent = self.wiki.get_entity_by_slug(entity_slug)
+            if not ent: 
                 return jsonify({'message': f'Entity with slug {entity_slug} not found'}), 404
-            ent = entities[0]
             data = {
                 'entity': {
                     'title': ent.title,
                     'desc': ent.desc,
                     'slug': ent.slug,
                     'markdown': ent.markdown
+                }
+            }
+            return jsonify(data)
+        
+        @self.app.route('/api/source', methods=('GET',))
+        @cross_origin()
+        def api_source():
+            source_id = request.args.get('id')
+            src = self.wiki.get_source_by_id(id=source_id)
+            if not src:
+                return jsonify({'message': f'Source with id {source_id} not found'}), 404
+            data = {
+                'source': {
+                    'title': src.title,
+                    'id': src.id,
                 }
             }
             return jsonify(data)

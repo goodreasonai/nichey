@@ -1,92 +1,261 @@
-from sqlalchemy import Column, Integer, String, Sequence, DateTime, func, Boolean, ForeignKey, LargeBinary, Text
-from sqlalchemy.orm import DeclarativeBase
 from dataclasses import dataclass
+import datetime
+import sqlite3
+from datetime import datetime
+import tempfile
+import os
 
 
-class Base(DeclarativeBase):
-    pass
-
-
-# Parent to web source
-class Source(Base):
-    __tablename__ = 'source'
-    id = Column(Integer, Sequence('source_id'), primary_key=True)
-    created_at = Column(DateTime, server_default=func.now())
-    are_entities_extracted = Column(Boolean, default=False)
-    title = Column(String)
-    type = Column(String)
-
-    __mapper_args__ = {'polymorphic_identity': 'source', 'polymorphic_on': 'type'}
-
-
-# The inheritance here is joined table inheritance
-class WebSource(Source):
-    __tablename__ = 'web_source'
-    id = Column(Integer, ForeignKey('source.id'), primary_key=True)
-    url = Column(String, nullable=False)  # Required field
-    snippet = Column(String)  # Snippet returned in search result, if applicable
-    query = Column(String)  # Query used to get source, if applicable
-    search_engine = Column(String)  # Search engine where the source was found, if applicable
-    
-    __mapper_args__ = {'polymorphic_identity': 'web_source'}
-
-
-# Parent to primary data and screenshots
-class SourceData(Base):
-    __tablename__ = 'source_data'
-
-    id = Column(Integer, Sequence('source_data_id'), primary_key=True)
-    created_at = Column(DateTime, server_default=func.now())
-    mimetype = Column(String, nullable=False)
-    data = Column(LargeBinary)
-    type = Column(String)
-
-    source_id = Column(Integer, 
-                      ForeignKey('source.id', ondelete="CASCADE"),
-                      nullable=False)
-
-    __mapper_args__ = {'polymorphic_identity': 'source_data', 'polymorphic_on': 'type'}
-
-
-class SourcePrimaryData(SourceData):
-    __tablename__ = 'source_primary_data'
-
-    id = Column(Integer, ForeignKey('source_data.id'), primary_key=True)
-    text = Column(Text)
-
-    __mapper_args__ = {'polymorphic_identity': 'source_primary_data'}
-
-
-class SourceScreenshot(SourceData):
-    __tablename__ = 'source_screenshot'
-
-    id = Column(Integer, ForeignKey('source_data.id'), primary_key=True)
-    order = Column(Integer, nullable=False)
-
-    __mapper_args__ = {'polymorphic_identity': 'source_screenshot'}
-
+DB_VERSION = 1  # Incremement when making changes to the schema to force auto migration
 
 ENTITY_TYPES = ["person", "place", "organization", "event", "publication", "law", "product", "object", "concept"]
-# Parent to web source
-class Entity(Base):
-    __tablename__ = 'entity'
-    id = Column(Integer, Sequence('entity_id'), primary_key=True)
-    slug = Column(String(255), unique=True, index=True, nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
-    title = Column(String)
-    type = Column(String)
-    desc = Column(Text)
-    is_written = Column(Boolean, default=False)
-    markdown = Column(Text)
+
+@dataclass
+class Source():
+    title: str | None = None
+    text: str | None = None
+
+    id: int | None = None
+    created_at: datetime | None = None
+    are_entities_extracted: int | None = None
+
+    author: str | None = None
+    desc: str | None = None
+    url: str | None = None
+    snippet: str | None = None
+    query: str | None = None
+    search_engine: str | None = None
+
+@dataclass
+class PrimarySourceData():
+    source_id: int | None = None
+    mimetype: str | None = None
+    data: bytes | None = None
+    id: int | None = None
+    created_at: datetime | None = None
+
+@dataclass
+class ScreenshotData():
+    source_id: int | None = None
+    mimetype: str | None = None
+    data: bytes | None = None
+    place: int | None = None 
+    id: int | None = None
+    created_at: datetime | None = None
+
+@dataclass
+class Entity():
+    slug: str | None = None
+    title: str | None = None
+    type: str | None = None
+    desc: str | None = None
+    markdown: str | None = None
+    is_written: int | None = None
+    id: int | None = None
+    created_at: datetime | None = None
+
+@dataclass
+class Reference():
+    source_id: int = None
+    entity_id: int = None
+    id: int = None
+
+# Mapping of table names to dataclasses
+TABLE_TO_DATACLASS = {
+    "sources": Source,
+    "primary_source_data": PrimarySourceData,
+    "screenshot_data": ScreenshotData,
+    "entities": Entity,
+    "refs": Reference
+}
+DATACLASS_TO_TABLE = {v: k for k, v in TABLE_TO_DATACLASS.items()}
+
+def create_db(path):
+    conn = sqlite3.connect(path)
+    cursor = conn.cursor()
+    try:
+        sql = """
+        CREATE TABLE sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            are_entities_extracted INTEGER DEFAULT 0,
+            
+            title TEXT,
+            text TEXT,
+
+            author TEXT,
+            desc TEXT,
+            url TEXT,
+            snippet TEXT,
+            query TEXT,
+            search_engine TEXT,
+
+            tbl TEXT DEFAULT 'sources'
+        )
+        """
+        cursor.execute(sql)
+
+        # FTS5 Search over source text
+        sql = """
+            CREATE VIRTUAL TABLE IF NOT EXISTS sources_fts5 USING fts5(
+                source_id UNINDEXED,
+                title,
+                author,
+                desc,
+                text
+            );
+        """
+        cursor.execute(sql)
+
+        sql = """
+        CREATE TABLE primary_source_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            mimetype TEXT,
+            data BLOB,
+
+            tbl TEXT DEFAULT 'primary_source_data'
+        )
+        """
+        cursor.execute(sql)
+
+        sql = """
+            CREATE TABLE screenshot_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_id INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                mimetype TEXT,
+                data BLOB,
+                place INTEGER,
+
+                tbl TEXT DEFAULT 'screenshot_data'
+            )
+        """
+        cursor.execute(sql)
+
+        sql = """
+            CREATE TABLE entities (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                slug VARCHAR(255) UNIQUE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                title TEXT,
+                type TEXT,
+                desc TEXT,
+                markdown TEXT,
+                is_written INTEGER DEFAULT 0,
+
+                tbl TEXT DEFAULT 'entities'
+            )
+        """
+        cursor.execute(sql)
+        sql = """
+            CREATE UNIQUE INDEX idx_entities_slug ON entities(slug);
+        """
+        cursor.execute(sql)
+
+        sql = """
+            CREATE TABLE refs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_id INTEGER,
+                entity_id INTEGER,
+
+                tbl TEXT DEFAULT 'refs'
+            )
+        """
+        cursor.execute(sql)
+        sql = """
+            CREATE INDEX idx_references_source_id ON refs(source_id);
+        """
+        cursor.execute(sql)
+        sql = """
+            CREATE INDEX idx_references_entity_id ON refs(entity_id);
+        """
+        cursor.execute(sql)
+
+        sql = f"""
+            PRAGMA user_version = {DB_VERSION}
+        """
+        cursor.execute(sql)
+        conn.commit()
+    finally:
+        conn.close()
 
 
-class Reference(Base):
-    __tablename__ = 'reference'
-    id = Column(Integer, primary_key=True)
-    source_id = Column(Integer, 
-                      ForeignKey('source.id', ondelete="CASCADE"),
-                      nullable=False)
+def obj_factory(cursor: sqlite3.Cursor, row):
+    """Maps database rows to their respective dataclass objects."""
+    fields = [column[0] for column in cursor.description]
+    my_dict = { key: value for key, value in zip(fields, row) }
+    if 'tbl' not in my_dict:  # Would be something special like getting a pragma or something
+        return my_dict
+    tbl = my_dict['tbl']
+    dataclass = TABLE_TO_DATACLASS[tbl]
+    del my_dict['tbl']
+    return dataclass(**my_dict)
+
+
+# Migrates the user's database to the current version
+# Will copy over all columns that still exist + add new ones (with null values)
+def migrate_db(path, conn: sqlite3.Connection):
+    sql = "PRAGMA user_version"
+    res = conn.execute(sql)
+    version = res.fetchone()['user_version']
+    if version >= DB_VERSION:
+        return path, conn
+
+    # Create new database
+    temp_file = tempfile.NamedTemporaryFile(mode='w+', delete=False)
+    db_path = temp_file.name
+
+    create_db(db_path)
+    new_conn = sqlite3.connect(db_path)
+    new_conn.row_factory = obj_factory
+
+    new_cursor = new_conn.cursor()
+    old_cursor = conn.cursor()
+
+    tables_to_reconstruct = [x for x in TABLE_TO_DATACLASS.keys()]
+
+    for table in tables_to_reconstruct:
+        # Get common columns first
+        new_cursor.execute(f"PRAGMA table_info({table});")
+        new_columns = {col["name"] for col in new_cursor.fetchall()}
+
+        old_cursor.execute(f"PRAGMA table_info({table});")
+        old_columns = {col["name"] for col in old_cursor.fetchall()}
+
+        common_columns = new_columns.intersection(old_columns)
+        if not common_columns:
+            continue
+
+        columns_list = ", ".join(common_columns)
+
+        # 1. Read rows from old DB in one go (or chunked if data is huge).
+        select_sql = f"SELECT {columns_list} FROM {table}"
+        old_cursor.execute(select_sql)
+        rows = old_cursor.fetchall()
+
+        # 2. Insert them into new DB efficiently:
+        placeholders = ", ".join(["?"] * len(common_columns))
+        insert_sql = f"INSERT INTO {table} ({columns_list}) VALUES ({placeholders})"
+
+        # Wrap in a transaction for fewer commits
+        new_conn.execute("BEGIN TRANSACTION;")
+        # executemany can take an iterable of tuples
+        new_cursor.executemany(
+            insert_sql,
+            (
+                tuple(row_dict[col] for col in common_columns)
+                for row_dict in rows
+            ),
+        )
+        new_conn.execute("COMMIT;")
+
+    new_conn.commit()
     
-    entity_id = Column(Integer, 
-                      ForeignKey('entity.id', ondelete="CASCADE"),
-                      nullable=False)
+    new_cursor.close()
+    old_cursor.close()
+
+    # Remove the old database and attach new one
+    os.remove(path)
+    return db_path, new_conn
