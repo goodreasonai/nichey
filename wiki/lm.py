@@ -22,7 +22,7 @@ class LM():
 
 
 class OpenAILM(LM):
-    def __init__(self, model, max_input_tokens=None, accepts_images=False, api_key=None, base_url=None, fail_on_overflow=False):
+    def __init__(self, model, max_input_tokens=8096, accepts_images=False, api_key=None, base_url=None, fail_on_overflow=False):
         self.model = model
         self.client = OpenAI(
             base_url=base_url,
