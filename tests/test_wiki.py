@@ -132,3 +132,12 @@ def test_write_entities():
     assert(entities[0].is_written)
     assert(entities[0].markdown)
 
+
+def test_local_sources():
+    mywiki = wiki.Wiki(path=get_tmp_path(), topic="")
+    paths = ['America Against America.pdf']
+    mywiki.load_local_sources(paths)
+    results = mywiki.search_sources_by_text("America Against America")
+    assert(len(results) == 1)
+    assert(results[0].title == 'America Against America.pdf')
+    assert(len(results[0].text) > 1000)

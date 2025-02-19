@@ -2,9 +2,8 @@ from .db import Source, Entity, PrimarySourceData, ScreenshotData, ENTITY_TYPES,
 from .scraper import Scraper, ScrapeResponse
 from .search_engine import WebLink
 from .file_loaders import get_loader, FileLoader, RawChunk, TextSplitter
-from .utils import get_ext_from_mime_type, get_token_estimate
+from .utils import get_ext_from_mime_type, get_token_estimate, get_ext_from_path, get_filename_from_path, get_mime_type_from_ext
 import os
-import sys
 from pydantic import BaseModel
 from .lm import LM, make_retrieval_prompt, LMResponse
 from slugify import slugify
@@ -248,14 +247,46 @@ class Wiki():
         source = Source(title=title, text=text, author=author, desc=desc, url=url, snippet=snippet, query=query, search_engine=search_engine, are_entities_extracted=are_entities_extracted)
         source = self._insert_row(source)
         return source
+    
+
+    # TODO: allow breaking up by pages when supported
+    def load_local_sources(self, paths: list[str]) -> list[Source]:
+        for i in tqdm(range(len(paths)), desc="Loading", total=len(paths)):
+            path = paths[i]
+            ext = get_ext_from_path(path)
+            logger.info(ext)
+            loader = get_loader(ext, path)
+            if not loader:
+                logger.warning(f"Couldn't process {path}; skipping.")
+            text = ""
+            for raw_chunk in loader.load_and_split(TextSplitter()):
+                raw_chunk: RawChunk
+                text += raw_chunk.page_content
+            src: Source = self.add_source(
+                title=get_filename_from_path(path),
+                text=text
+            )
+
+            data = None
+            with open(path, 'rb') as fhand:
+                data = fhand.read()
+
+            psd = PrimarySourceData(
+                source_id=src.id,
+                mimetype=get_mime_type_from_ext(ext),
+                data=data
+            )
+            self._insert_row(psd)
+        
 
     # Scrapes and stores info in the db
-    def scrape_web_results(self, scraper: Scraper, results: list[WebLink], max_n=None) -> list[WebLink]:
+    def scrape_web_results(self, scraper: Scraper, results: list[WebLink], max_n=None) -> list[tuple[WebLink, Source | None]]:
         scraped = []
         total = min(len(results), max_n) if max_n is not None else len(results)
         for i in tqdm(range(total), desc="Scraping", total=total):
             res = results[i]
             resp: ScrapeResponse = scraper.scrape(res.url)
+            new_source = None
             if not resp.success:
                 logger.warning(f"Failed to scrape {res.url}; moving on.")
             else:
@@ -306,7 +337,7 @@ class Wiki():
                                 )
                                 self._insert_row(screenshot)
             
-            scraped.append(res)
+            scraped.append((res, new_source))
         return scraped
                     
 
