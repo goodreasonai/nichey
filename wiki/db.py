@@ -4,9 +4,10 @@ import sqlite3
 from datetime import datetime
 import tempfile
 import os
+from .logger import logger
 
 
-DB_VERSION = 1  # Incremement when making changes to the schema to force auto migration
+DB_VERSION = 2  # Incremement when making changes to the schema to force auto migration
 
 ENTITY_TYPES = ["person", "place", "organization", "event", "publication", "law", "product", "object", "concept"]
 
@@ -106,6 +107,31 @@ def create_db(path):
             );
         """
         cursor.execute(sql)
+        sql = """
+            CREATE TRIGGER IF NOT EXISTS after_sources_insert
+            AFTER INSERT ON sources
+            BEGIN
+                INSERT INTO sources_fts5 (source_id, title, author, desc, text) VALUES (NEW.id, NEW.title, NEW.author, NEW.desc, NEW.text);
+            END;
+        """
+        cursor.execute(sql)
+        sql = """
+            CREATE TRIGGER IF NOT EXISTS after_sources_update
+            AFTER UPDATE ON sources
+            BEGIN
+                DELETE FROM sources_fts5 WHERE source_id = OLD.id;
+                INSERT INTO sources_fts5 (source_id, title, author, desc, text) VALUES (NEW.id, NEW.title, NEW.author, NEW.desc, NEW.text);
+            END;
+        """
+        cursor.execute(sql)
+        sql = """
+            CREATE TRIGGER IF NOT EXISTS after_sources_delete
+            AFTER DELETE ON sources
+            BEGIN
+                DELETE FROM sources_fts5 WHERE source_id = OLD.id;
+            END;
+        """
+        cursor.execute(sql)
 
         sql = """
         CREATE TABLE primary_source_data (
@@ -202,6 +228,8 @@ def migrate_db(path, conn: sqlite3.Connection):
     version = res.fetchone()['user_version']
     if version >= DB_VERSION:
         return path, conn
+
+    logger.warning("Existing wiki database is out of date; migrating to new version.")
 
     # Create new database
     temp_file = tempfile.NamedTemporaryFile(mode='w+', delete=False)

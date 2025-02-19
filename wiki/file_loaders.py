@@ -8,7 +8,11 @@ from unstructured.partition.odt import partition_odt
 from unstructured.partition.ppt import partition_ppt
 from unstructured.partition.pptx import partition_pptx
 from unstructured.partition.tsv import partition_tsv
-import fitz
+
+import warnings
+with warnings.catch_warnings():  # This rigamarol prevents these stupid SwigPy warnings caused by pymupdf
+    warnings.simplefilter("ignore")
+    import fitz
 
 
 # An iterable of RawChunks is returned by load_and_split

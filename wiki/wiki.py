@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from .lm import LM, make_retrieval_prompt, LMResponse
 from slugify import slugify
 import traceback
-from typing import Generator, Tuple, List
 import sqlite3
 from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import cross_origin
@@ -24,7 +23,7 @@ class Wiki():
     topic: str
     path: str
     conn: sqlite3.Connection
-    def __init__(self, title=None, topic=None, path=None, replace=False):
+    def __init__(self, topic: str, title=None, path=None, replace=False):
         self.title = title
         self.topic = topic
         if path is None:
@@ -133,7 +132,7 @@ class Wiki():
             return None
         return rows[0]
     
-    def _get_rows_by_id(self, cls, ids, limit=None, offset=0):
+    def _get_rows_by_ids(self, cls, ids, limit=None, offset=0):
         if cls not in DATACLASS_TO_TABLE:
             raise ValueError("Unrecognized dataclass")
         table = DATACLASS_TO_TABLE[cls]
@@ -149,6 +148,25 @@ class Wiki():
             return cursor.fetchall()
         finally:
             cursor.close()
+
+    def _delete_matching_rows(self, item):
+        dataclass = type(item)
+        if dataclass not in DATACLASS_TO_TABLE:
+            raise ValueError("Unrecognized dataclass")
+        table = DATACLASS_TO_TABLE[dataclass]
+        items = [(k, v) for k, v in item.__dict__.items() if v is not None]  # Extract and force an order
+        filters = " AND ".join([f"{k}=?" for k, _ in items])
+        values = [v for _, v in items]
+        sql = f"""
+            DELETE FROM {table} WHERE {filters}
+        """
+        cursor: sqlite3.Cursor = self.conn.cursor()
+        try:
+            cursor.execute(sql, values)
+            self.conn.commit()
+        finally:
+            cursor.close()
+
     
     def search_sources_by_text(self, query) -> list[Source]:
         cursor: sqlite3.Cursor = self.conn.cursor()
@@ -168,7 +186,7 @@ class Wiki():
     def get_referenced_sources(self, entity_id, limit=1000, offset=0) -> list[Source]:
         ref = Reference(entity_id=entity_id)
         refs: list[Reference] = self._match_rows(ref, limit=limit, offset=offset)
-        sources = self._get_rows_by_id(Source, [ref.source_id for ref in refs])
+        sources = self._get_rows_by_ids(Source, [ref.source_id for ref in refs])
         return sources
 
     def get_all_sources(self, limit=5000, offset=0) -> list[Source]:
@@ -180,8 +198,29 @@ class Wiki():
     def get_entity_by_slug(self, slug) -> Entity:
         return self._match_row(Entity(slug=slug))
     
+    def get_entities_by_type(self, type) -> list[Entity]:
+        return self._match_rows(Entity(type=type))
+    
     def get_source_by_id(self, id) -> Source:
         return self._match_row(Source(id=id))
+    
+    def delete_source_by_id(self, id) -> None:
+        self._delete_matching_rows(Source(id=id))
+
+    def delete_entity_by_slug(self, slug) -> None:
+        self._delete_matching_rows(Entity(slug=slug))
+
+    def add_entity(self, title: str, type: str=None, desc: str=None, markdown: str=None) -> Entity:
+        slug = slugify(title)
+        is_written = markdown is not None and len(markdown)
+        entity = Entity(slug=slug, title=title, type=type, desc=desc, markdown=markdown, is_written=is_written)
+        entity = self._insert_row(entity)
+        return entity
+    
+    def add_source(self, title: str, text: str, author: str=None, desc: str=None, url: str=None, snippet: str=None, query: str=None, search_engine: str=None, are_entities_extracted=False):
+        source = Source(title=title, text=text, author=author, desc=desc, url=url, snippet=snippet, query=query, search_engine=search_engine, are_entities_extracted=are_entities_extracted)
+        source = self._insert_row(source)
+        return source
 
     # Scrapes and stores info in the db
     def scrape_web_results(self, scraper: Scraper, results: list[WebLink], max_n=None) -> list[WebLink]:
@@ -303,13 +342,7 @@ class Wiki():
                             )
                             self._insert_row(new_reference)
                         else:
-                            new_entity = Entity(
-                                type=ent.type,
-                                title=ent.title,
-                                desc=ent.desc,
-                                slug=slug
-                            )
-                            new_entity: Entity = self._insert_row(new_entity)
+                            new_entity: Entity = self.add_entity(ent.title, type=ent.type, desc=ent.desc)
                             made_entities.append(new_entity)
                             new_reference = Reference(
                                 source_id=src.id,
@@ -324,7 +357,7 @@ class Wiki():
                 logger.debug(traceback.format_exc())
                 logger.warning(f"An exception occurred trying to parse entities of source with id {src.id}. Moving on.")
 
-        return made_entities
+        return processed
 
 
     def write(self, lm: LM, max_n=None, rewrite=False) -> list[Entity]:
