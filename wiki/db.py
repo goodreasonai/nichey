@@ -220,6 +220,13 @@ def obj_factory(cursor: sqlite3.Cursor, row):
     return dataclass(**my_dict)
 
 
+def dict_factory(cursor, row):
+    d = {}
+    for idx, col in enumerate(cursor.description):
+        d[col[0]] = row[idx]
+    return d
+
+
 # Migrates the user's database to the current version
 # Will copy over all columns that still exist + add new ones (with null values)
 def migrate_db(path, conn: sqlite3.Connection):
@@ -240,6 +247,7 @@ def migrate_db(path, conn: sqlite3.Connection):
     new_conn.row_factory = obj_factory
 
     new_cursor = new_conn.cursor()
+    conn.row_factory = dict_factory  # Makes it easier to copy things over, but new one stays obj_factory
     old_cursor = conn.cursor()
 
     tables_to_reconstruct = [x for x in TABLE_TO_DATACLASS.keys()]

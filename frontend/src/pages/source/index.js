@@ -3,6 +3,9 @@ import MarkdownViewer from "../../components/MarkdownViewer/MarkdownViewer";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { useNavBar } from "@/components/NavBar/NavBar";
+import DeleteIcon from '../../../public/DeleteIcon.png'
+import Modal from "@/components/Modal/Modal";
+import Button from "@/components/Button/Button";
 
 
 export default function Source({}){
@@ -12,6 +15,7 @@ export default function Source({}){
 
     const [source, setSource] = useState()
     const [sourceFound, setSourceFound] = useState(undefined)
+    const [showDelete, setShowDelete] = useState(false)
     const { setPath } = useNavBar()
 
     useEffect(() => {
@@ -34,29 +38,54 @@ export default function Source({}){
         }
     }, [source])
 
-    useEffect(() => {
-        async function getSource(){
-            try {
-                const url = `${process.env.NEXT_PUBLIC_API}/api/source?id=${id}`
-                const response = await fetch(url, {
-                    'method': 'GET'
-                })
-                if (!response.ok){
-                    throw Error("Response was not ok")
-                }
-                const myJson = await response.json()
-                setSource(myJson['source'])
-                setSourceFound(true)
+    async function getSource(){
+        try {
+            const url = `${process.env.NEXT_PUBLIC_API}/api/source?id=${id}`
+            const response = await fetch(url, {
+                'method': 'GET'
+            })
+            if (!response.ok){
+                throw Error("Response was not ok")
             }
-            catch(e) {
-                console.log(e)
-                setSourceFound(false)
-            }
+            const myJson = await response.json()
+            setSource(myJson['source'])
+            setSourceFound(true)
         }
+        catch(e) {
+            console.log(e)
+            setSourceFound(false)
+        }
+    }
+
+    useEffect(() => {
         if (id){
             getSource()
         }
     }, [id])
+
+    async function deletePage(){
+        setShowDelete(false)
+        try {
+            const url = `${process.env.NEXT_PUBLIC_API}/api/delete-source`
+            const data = {
+                'id': id,
+            }
+            const response = await fetch(url, {
+                'headers': {
+                    'Content-Type': 'application/json' 
+                },
+                'body': JSON.stringify(data),
+                'method': 'POST'
+            })
+            if (!response.ok){
+                throw Error("Could not save")
+            }
+            getSource()
+        }
+        catch(e) {
+            console.log(e)
+        }
+    }
 
     const info = [
         {'label': 'URL', 'value': (
@@ -95,6 +124,23 @@ export default function Source({}){
                     })}
                 </div>
             ) : "")}
+
+            <div style={{'position': 'fixed', 'right': '10px', 'bottom': '10px', 'display': 'flex', 'gap': '10px', 'alignItems': 'center'}}>
+                <div onClick={() => {setShowDelete(true)}} style={{'backgroundColor': 'var(--highlight)', 'border': '1px solid var(--border-color)', 'borderRadius': '5px', 'padding': '5px', 'cursor': 'pointer', 'display': 'flex', 'alignItems': 'center'}}>
+                    <img src={DeleteIcon.src} width={20} height={20} alt={"Delete"} />
+                </div>
+                <Modal title={"Delete"} isOpen={showDelete} close={() => setShowDelete(false)}>
+                    <div style={{'display': 'flex', 'flexDirection': 'column', 'gap': '1rem', 'alignItems': 'center'}}>
+                        <div>
+                            {`Are you sure you would like to delete the source ${source?.title}?`}
+                        </div>
+                        <div style={{'display': 'flex', 'gap': '10px'}}>
+                            <Button value={"Delete"} onClick={() => deletePage()} />
+                            <Button value={"Cancel"} onClick={() => {setShowDelete(false)}} />
+                        </div>
+                    </div>
+                </Modal>
+            </div>
         </div>
     )
 }

@@ -2,6 +2,14 @@
   --background: #ffffff;
   --foreground: #171717;
 
+  --highlight: #f0f0f0;
+  --border-color: #a0a0a0;
+
+  --passive-text: #707070;
+
+  --medium-border-radius: 5px;
+  --small-border-radius: 5px;
+
   --margin-top: 1rem;
   --margin: 2rem;
 }

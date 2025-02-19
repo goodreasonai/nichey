@@ -44,7 +44,7 @@ export default function Articles() {
                     </div>
                 ) : (
                     <div key={ent.slug}>
-                        {ent.title}
+                        <Link style={{'all': 'unset', 'cursor': 'default'}} href={{'pathname': `/article`, 'query': { 'e': ent.slug }}}>{ent.title}</Link>
                     </div>
                 )
             })}

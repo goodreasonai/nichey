@@ -341,13 +341,13 @@ class Wiki():
         return scraped
                     
 
-    def make_entities(self, lm: LM) -> list[tuple[Source, list[Entity]]]:
+    def make_entities(self, lm: LM, max_sources=None) -> list[tuple[Source, list[Entity]]]:
         # Go through sources
         sources = self._match_rows(Source(are_entities_extracted=False))
         if not len(sources):
             logger.warning("No sources found to make entities from.")
         
-        total = len(sources)
+        total = min(len(sources), max_sources) if max_sources is not None else sources
         processed = []
         for i in tqdm(range(total), total=total, desc="Extracting"):
             src: Source = sources[i]
@@ -593,5 +593,45 @@ class Wiki():
                 }
             }
             return jsonify(data)
+        
+        @app.route('/api/update-entity', methods=('POST',))
+        @cross_origin()
+        def api_update_entity():
+            slug = request.json.get('slug')
+            ent = self.get_entity_by_slug(slug=slug)
+            if not ent:
+                return jsonify({'message': f'Entity with slug {slug} not found'}), 404
+            title = request.json.get('title')
+            type = request.json.get('type')
+            desc = request.json.get('desc')
+            markdown = request.json.get('markdown')
+            self.update_entity_by_slug(
+                slug,
+                title=title,
+                type=type,
+                desc=desc,
+                markdown=markdown
+            )
+            return jsonify({'message': 'success'})
+        
+        @app.route('/api/delete-entity', methods=('POST',))
+        @cross_origin()
+        def api_delete_entity():
+            slug = request.json.get('slug')
+            ent = self.get_entity_by_slug(slug=slug)
+            if not ent:
+                return jsonify({'message': f'Entity with slug {slug} not found'}), 404
+            self.delete_entity_by_slug(slug)
+            return jsonify({'message': 'success'})
+        
+        @app.route('/api/delete-source', methods=('POST',))
+        @cross_origin()
+        def api_delete_source():
+            id = request.json.get('id')
+            src = self.get_source_by_id(id=id)
+            if not src:
+                return jsonify({'message': f'Source with id {id} not found'}), 404
+            self.delete_source_by_id(src.id)
+            return jsonify({'message': 'success'})
         
         app.run(port=5000, threaded=False)
