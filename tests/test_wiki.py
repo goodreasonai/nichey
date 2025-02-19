@@ -12,10 +12,16 @@ def test_entities():
         mywiki.add_entity(title=title, type=type)
         ents = mywiki.get_entities_by_type(type)
         assert(len(ents) == 1)
-        assert(ents[0].title == title)
-        assert(ents[0].type == type)
+        entity = ents[0]
+        assert(entity.title == title)
+        assert(entity.type == type)
 
-        mywiki.delete_entity_by_slug(ents[0].slug)
+        desc = "A 3 time Cy Young award winning pitcher"
+        mywiki.update_entity_by_slug(entity.slug, desc=desc)
+        entity = mywiki.get_entity_by_slug(entity.slug)
+        assert(entity.desc == desc)
+
+        mywiki.delete_entity_by_slug(entity.slug)
         ents = mywiki.get_entities_by_type(type)
         assert(len(ents) == 0)
     finally:
@@ -32,11 +38,17 @@ def test_sources():
         search_text = "Maman est morte"
         sources = mywiki.search_sources_by_text(search_text)
         assert(len(sources) == 1)
-        assert(sources[0].title == title)
-        assert(sources[0].author == author)
+        src = sources[0]
+        assert(src.title == title)
+        assert(src.author == author)
 
-        mywiki.delete_source_by_id(sources[0].id)
-        source = mywiki.get_source_by_id(id=sources[0].id)
+        desc = "A great work of existentialism"
+        mywiki.update_source_by_id(id=src.id, desc=desc)
+        src = mywiki.get_source_by_id(src.id)
+        assert(src.desc == desc)
+
+        mywiki.delete_source_by_id(src.id)
+        source = mywiki.get_source_by_id(id=src.id)
         assert(source is None)
     finally:
         os.remove(mywiki.path)

@@ -81,7 +81,8 @@ class Wiki():
         if dataclass not in DATACLASS_TO_TABLE:
             raise ValueError("Unrecognized dataclass")
         table = DATACLASS_TO_TABLE[dataclass]
-        
+        assert(item.id is not None)
+
         items = [(k, v) for k, v in item.__dict__.items() if v is not None]  # Extract and force an order
         placeholders = ", ".join([f"{k}=?" for k, _ in items])
         sql = f"""
@@ -216,6 +217,32 @@ class Wiki():
         entity = Entity(slug=slug, title=title, type=type, desc=desc, markdown=markdown, is_written=is_written)
         entity = self._insert_row(entity)
         return entity
+    
+    def update_entity_by_slug(self, slug, title: str = None, type: str = None, desc: str = None, markdown: str=None) -> None:
+        existing = self.get_entity_by_slug(slug)
+        is_written = existing.is_written or (markdown is not None and len(markdown))
+        entity = Entity(
+            slug=slug,
+            title=title,
+            type=type,
+            desc=desc,
+            markdown=markdown,
+            is_written=is_written,
+            id=existing.id
+        )
+        self._update_row(entity)  # updates by id, so need to retrieve ID with the get call first
+
+    def update_source_by_id(self, id, title: str = None, author: str = None, desc: str = None, url: str=None, snippet: str = None, query: str = None) -> None:
+        entity = Source(
+            id=id,
+            title=title,
+            desc=desc,
+            author=author,
+            url=url,
+            snippet=snippet,
+            query=query
+        )
+        self._update_row(entity)
     
     def add_source(self, title: str, text: str, author: str=None, desc: str=None, url: str=None, snippet: str=None, query: str=None, search_engine: str=None, are_entities_extracted=False):
         source = Source(title=title, text=text, author=author, desc=desc, url=url, snippet=snippet, query=query, search_engine=search_engine, are_entities_extracted=are_entities_extracted)
