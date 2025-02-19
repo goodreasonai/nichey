@@ -6,7 +6,7 @@ from .utils import get_ext_from_mime_type, get_token_estimate
 import os
 import sys
 from pydantic import BaseModel
-from .lm import LM, get_safe_context_length, LMResponse
+from .lm import LM, make_retrieval_prompt, LMResponse
 from slugify import slugify
 import traceback
 from typing import Generator, Tuple, List
@@ -150,7 +150,7 @@ class Wiki():
         finally:
             cursor.close()
     
-    def search_sources_by_text(self, query):
+    def search_sources_by_text(self, query) -> list[Source]:
         cursor: sqlite3.Cursor = self.conn.cursor()
         try:
             # See specification of an "fts5 string" here: https://www.sqlite.org/fts5.html#full_text_query_syntax
@@ -184,7 +184,8 @@ class Wiki():
         return self._match_row(Source(id=id))
 
     # Scrapes and stores info in the db
-    def scrape_web_results(self, scraper: Scraper, results: list[WebLink], max_n=None):
+    def scrape_web_results(self, scraper: Scraper, results: list[WebLink], max_n=None) -> list[WebLink]:
+        scraped = []
         total = min(len(results), max_n) if max_n is not None else len(results)
         for i in tqdm(range(total), desc="Scraping", total=total):
             res = results[i]
@@ -239,16 +240,18 @@ class Wiki():
                                 )
                                 self._insert_row(screenshot)
             
-            yield res
+            scraped.append(res)
+        return scraped
                     
 
-    def make_entities(self, lm: LM) -> Generator[Tuple[List[Entity], Source]]:
+    def make_entities(self, lm: LM) -> list[tuple[Source, list[Entity]]]:
         # Go through sources
         sources = self._match_rows(Source(are_entities_extracted=False))
         if not len(sources):
             logger.warning("No sources found to make entities from.")
         
         total = len(sources)
+        processed = []
         for i in tqdm(range(total), total=total, desc="Extracting"):
             src: Source = sources[i]
             made_entities = []
@@ -265,16 +268,7 @@ class Wiki():
                         entities: list[EntityData]
 
                     intro = "You are tasked with extracting relevant entities from the given source material into JSON. Here is the text extracted from the source material:"
-
-                    safe_token_length = get_safe_context_length(lm)                    
-                    token_tot = 0
-                    prompt_src_text = ""
-                    splitter = TextSplitter()
-                    for chunk_txt in splitter.split_text(text):
-                        if get_token_estimate(chunk_txt) + token_tot > safe_token_length:
-                            break
-                        prompt_src_text += chunk_txt
-                    
+                    prompt_src_text = make_retrieval_prompt(lm, [text])
                     wiki = "Each entity will become a custom Wiki article that the user is constructing based on his research topic."
                     type_req = f"The entities/pages can be the following types: {', '.join(ENTITY_TYPES)}"
                     neg_req = f"You should not make entities for the following categories, which don't count: {', '.join(not_entities)}"
@@ -285,6 +279,9 @@ class Wiki():
                     conclusion = "Now, read the user's research topic and extract the relevant entites from the source given above."
                     system_prompt = "\n\n".join([intro, prompt_src_text, wiki, type_req, neg_req, rel_req, format_req, example, example_cont, conclusion])
                     user_prompt = self.topic
+
+                    logger.debug(f"Make Entity User Prompt Length: {get_token_estimate(user_prompt)}")
+                    logger.debug(f"Make Entity System Prompt Length: {get_token_estimate(system_prompt)}")
 
                     resp: LMResponse = lm.run(user_prompt, system_prompt, [], json_schema=Entities)
                     entities: Entities = resp.parsed
@@ -321,13 +318,16 @@ class Wiki():
                             self._insert_row(new_reference)
                 src.are_entities_extracted = True
                 self._update_row(src)
+                processed.append((src, made_entities))
 
             except:
                 logger.debug(traceback.format_exc())
                 logger.warning(f"An exception occurred trying to parse entities of source with id {src.id}. Moving on.")
 
+        return made_entities
 
-    def write(self, lm: LM, max_n=None, rewrite=False):
+
+    def write(self, lm: LM, max_n=None, rewrite=False) -> list[Entity]:
         all_entity_text = ""
         
         all_entities: list[Entity] = self.get_all_entities()
@@ -338,13 +338,18 @@ class Wiki():
             entities = list(all_entities)
         else:
             entities = self._match_rows(Entity(is_written=False))
-        
+        written = []
         total = min(len(entities), max_n) if max_n is not None else len(entities)
         for i in tqdm(range(total), desc="Writing", disable=logger.level > logging.INFO):
             ent: Entity = entities[i]
 
+            logger.debug(f"Writing entity '{ent.title}'")
+
             matching_sources = self.search_sources_by_text(ent.title)
             direct_sources = self.get_referenced_sources(entity_id=ent.id)
+
+            logger.debug(f"Matching Sources Found: {len(matching_sources)}")
+            logger.debug(f"Direct Sources Found: {len(direct_sources)}")
 
             # Combine the results of both queries, ensuring no duplicates
             matches_ids = {match.id for match in matching_sources}
@@ -352,6 +357,8 @@ class Wiki():
             for src in direct_sources:
                 if src.id not in matches_ids:
                     combined.append(src)
+
+            logger.debug(f"Combined Sources Found: {len(combined)}")
 
             # Now 'sources' contains all the Source objects associated with the matched SourcePrimaryData
             if not len(combined):
@@ -362,7 +369,7 @@ class Wiki():
                     links = "You can specify a link to another wiki entry like: [[slug | Title]]. Whenever you mention some other entity, you should probably use a link. Here are all the entries in the wiki for your reference:"
                     all_entity_text = all_entity_text
                     source_instruct = "Below are sources from which you can draw material for your wiki entry. **Use only these sources for the information in your entry. You may not draw from any other outside information you may have.**"
-                    source_text = "\n\n".join([f"<START OF SOURCE WITH ID {data.id}>\n{data.text}\n</END OF SOURCE WITH ID {data.id}>" for data in combined])
+                    source_text = make_retrieval_prompt(lm, [data.text for data in combined], prefixes=[f"<START OF SOURCE WITH ID {data.id}>" for data in combined], suffixes=[f"</END OF SOURCE WITH ID {data.id}>" for data in combined])
                     references = "In order to cite a source using a footnote, use the syntax '[[@SOURCE_ID]]', with the @ sign. For example, a footnote to source with ID 15 would be [[@15]]. A link to the proper source will be automatically placed; DO NOT WRITE A FOOTNOTES OR REFERENCES SECTION. THEY WILL BE AUTOMATICALLY INCLUDED. WHENEVER YOU CITE A SOURCE (as opposed to another article) YOU MUST USE THE AT (@) SIGN."
                     conclusion = "Now the user will specify which wiki page you are tasked with writing."
                     system = "\n\n".join([intro, links, all_entity_text, source_instruct, source_text, references, conclusion])
@@ -371,16 +378,23 @@ class Wiki():
                     user_prompt_disambiguation = f"A brief description of this entity for disambiguation: {ent.desc}"
                     user_prompt_topic = f"The goal of the wiki is to fulfill this research goal: {self.topic}"
                     prompt = "\n".join([user_prompt_intro, user_prompt_disambiguation, user_prompt_topic])
+                    
+                    logger.debug(f"Write User Prompt Length: {get_token_estimate(prompt)}")
+                    logger.debug(f"Write System Prompt Length: {get_token_estimate(system)}")
+
                     lm_resp: LMResponse = lm.run(prompt, system, [])
                     new_markdown = lm_resp.text
                     
                     ent.markdown = new_markdown
                     ent.is_written = True
                     self._update_row(ent)
+                    written.append(ent)
 
                 except:
                     logger.debug(traceback.format_exc())
                     logger.error(f"An exception occurred trying to write entry for {ent.slug}. Moving on.")
+
+        return written
 
 
     def export(self, dir="output", remove_cross_refs=True, remove_source_refs=True):
