@@ -156,12 +156,14 @@ def test_heal():
     """
     Would like to:
 
-    - Transform [Bad](link) to [[Bad | link]]
+    - Transform [Bad](link) to [[link | Bad]]
+    - Transform [[Bad]](link) to [[link | Bad]]
     - Transform [1](1) to [[@1]]
     - Transform [[1]] to [[@1]]
     - Transform [1] to [[@1]]
     - Transform [[1 | source]] to [[@1]]
-    - Transform [[Bad]](link) to [[Bad | link]]
+    - Transform [[2], [@3]] to [[@2]][[@3]]
+    - Transform [@1] to [[@1]]
     - Ensure all internal links go to an existing entity
     - Ensure all source references go to an existing source
 
@@ -182,6 +184,13 @@ def test_heal():
         )
         assert(existing_src.id == 1)
 
+        existing_src_2: wiki.Source = mywiki.add_source(
+            title="Brunswick School Mission and History",
+            text="In the words of our founder, George Carmichael, 'Brunswick School has been ably and generously preparing boys for life since 1902.'",
+            url="https://admissions.brunswickschool.org/about/mission-history/"
+        )
+        assert(existing_src_2.id == 2)
+
         new_ent = mywiki.add_entity(
             title="George Carmichael",
             type="person",
@@ -194,21 +203,23 @@ def test_heal():
             # George Carmichael
             George Carmichael founded [[Brunswick School]] in 1902 in [[Greenwich, CT]].[1](1)
             See: [[ founding-of-wick | Founding of Brunswick School ]].
-            The [[brunswick-school | school]] was founded as an all boys version of Greenwich Academy, which would go on to admit only girls.
-            [Brunswick's](brunswick-school) motto is "Courage, Honor, Truth", which was selected by a vote of students shortly after the school's founding.
+            The [[brunswick-school | school]] was founded as an all boys version of Greenwich Academy, which would go on to admit only girls.[@1][2][3]
+            [Brunswick's](brunswick-school) motto is "Courage, Honor, Truth", which was selected by a vote of students shortly after the school's founding.[[@1], [@2]]
             [[Carmichael]](george-carmichael) graduated from Bowdoin College in 1897.[[@1]].
-            He was also active in Greenwich Civic life.[[1]][[2]]
+            He was also active in Greenwich Civic life.[[1]][[3]]
             Carmichael died aged 88.[[1 | source]]
+            [See also: [[Bowdoin College]]]
         """
         good_markdown = """
             # George Carmichael
             George Carmichael founded [[Brunswick School]] in 1902 in Greenwich, CT.[[@1]]
             See: Founding of Brunswick School.
-            The [[brunswick-school | school]] was founded as an all boys version of Greenwich Academy, which would go on to admit only girls.
-            [[brunswick-school | Brunswick's]] motto is "Courage, Honor, Truth", which was selected by a vote of students shortly after the school's founding.
+            The [[brunswick-school | school]] was founded as an all boys version of Greenwich Academy, which would go on to admit only girls.[[@1]][[@2]][3]
+            [[brunswick-school | Brunswick's]] motto is "Courage, Honor, Truth", which was selected by a vote of students shortly after the school's founding.[[@1]][[@2]]
             [[george-carmichael | Carmichael]] graduated from Bowdoin College in 1897.[[@1]].
             He was also active in Greenwich Civic life.[[@1]]
             Carmichael died aged 88.[[@1]]
+            [See also: Bowdoin College]
         """
         new_markdown = mywiki.heal_markdown(bad_markdown)
         assert(new_markdown == good_markdown)

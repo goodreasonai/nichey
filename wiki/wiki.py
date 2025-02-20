@@ -378,7 +378,7 @@ class Wiki():
                     format_req = "Use the appropriate JSON schema. Here is an example for an extraction for research involving the history of Bell Labs. In this case, we're assuming that the source material mentioned John Bardeen."
                     example = '{"entities": [{"type": "person", "title": "John Bardeen", "desc": "John Bardeen, along with Walter Brattain and Bill Shockley, co-invented the transistor during his time as a physicist at Bell Labs."}, ...]}'
                     example_cont = "For this example, you may also want to have included the transistor (object), The Invention of the Transistor (event), Walter Brattain (person), and Bill Shockley (person), assuming that all of these were actually mentioned in the source material."
-                    conclusion = "Now, read the user's research topic and extract the relevant entites from the source given above."
+                    conclusion = "Now, read the user's research topic and extract the relevant entites from the source given above. Include only entities that were mentioned in the source material. Try to limit the number of entities you extract to only those most relevant (there may be as few as 0 or at most 10)."
                     system_prompt = "\n\n".join([intro, prompt_src_text, wiki, type_req, neg_req, rel_req, format_req, example, example_cont, conclusion])
                     user_prompt = self.topic
 
@@ -442,55 +442,58 @@ class Wiki():
         def entity_exists(slug_or_title: str) -> bool:
             slug_or_title = slugify(slug_or_title)
             entity = self.get_entity_by_slug(slug_or_title)
-            exists = entity is not None
-            return exists
+            return entity is not None
 
-        # We'll perform multiple passes with regex to handle bracket patterns.
-
-        # For whatever god damn reason, the AI might use lookalike characters (like 【)
+        # For whatever reason, remove weird bracket lookalikes
         markdown = markdown.replace("【", "[").replace("】", "]")
 
-        # 1) Transform markdown links of the form [text](link)
-        #    e.g. [Bad](link) => [[link | Bad]]
-        #         [1](1)     => [[@1]] (if source with ID=1 exists)
+        # ------------------------------------------------------------------------
+        # 1) Transform [text](link) => [[link | text]] or [[@ID]]
+        # ------------------------------------------------------------------------
         def replace_square_paren(m: Match) -> str:
             text = m.group(1).strip()
             link = m.group(2).strip()
+
+            # Case: [1](1) => [[@1]]
             if is_numeric(text) and is_numeric(link) and text == link:
-                # This is likely a source reference [1](1)
-                if source_exists(text):
-                    return f"[[@{text}]]"
-                else:
-                    return text  # or remove it entirely
-            if is_numeric(text):
-                # Possibly a source reference if text is ID
                 if source_exists(text):
                     return f"[[@{text}]]"
                 else:
                     return text
-            # Otherwise treat it as entity
+
+            # Case: [1](foo) => possibly [[@1]] if 1 is a source
+            if is_numeric(text):
+                if source_exists(text):
+                    return f"[[@{text}]]"
+                else:
+                    return text
+
+            # Otherwise treat link as an entity slug
             if entity_exists(link):
-                # We have [title](slug)
                 return f"[[{link} | {text}]]"
             else:
-                # Link doesn't exist -> remove the slug but keep the text
+                # Link doesn't exist -> keep just the text
                 return text
 
         pattern_square_paren = re.compile(r'\[([^\]]+)\]\(([^\)]+)\)')
         markdown = pattern_square_paren.sub(replace_square_paren, markdown)
-
-        # 2) Transform double-bracket-with-paren: [[text]](link)
-        #    e.g. [[Bad]](slug) => [[slug | Bad]]
-        #         [[1]](1) => [[@1]] if #1 is a source
+        
+        "[[@19]]"
+        # ------------------------------------------------------------------------
+        # 2) Transform [[text]](link) => [[link | text]] or [[@ID]] 
+        # ------------------------------------------------------------------------
         def replace_double_bracket_paren(m: Match) -> str:
             text = m.group(1).strip()
             link = m.group(2).strip()
+
+            # e.g. [[1]](1) => [[@1]]
             if is_numeric(text) and is_numeric(link) and text == link:
                 if source_exists(text):
                     return f"[[@{text}]]"
                 else:
                     return text
-            # else treat as entity
+
+            # Otherwise treat link as an entity slug
             if entity_exists(link):
                 return f"[[{link} | {text}]]"
             else:
@@ -499,46 +502,99 @@ class Wiki():
         pattern_double_bracket_paren = re.compile(r'\[\[([^\]]+)\]\]\(([^\)]+)\)')
         markdown = pattern_double_bracket_paren.sub(replace_double_bracket_paren, markdown)
 
-        # 3) Transform double-bracket references [[text]].
-        #    If text is numeric => [[@N]] if source exists.
-        #    If text has a bar => assume it's [[ Title | slug ]] and check validity.
-        #    Otherwise check if entity exists by that text or slug.
-        def replace_double_bracket(m: Match) -> str:
-            text = m.group(1).strip()
+        # ------------------------------------------------------------------------
+        # 3) Transform double-bracket references [[text]] 
+        #    - Single references, or multiple references like [[@1], [@2], [@3]]
+        # ------------------------------------------------------------------------
+
+        # (a) Helper to handle a single reference
+        def handle_single_reference(txt: str) -> str:
+            txt = txt.strip()
 
             # Case: [[slug | Title]]
-            if '|' in text:
-                left, right = [x.strip() for x in text.split('|', maxsplit=1)]
+            if '|' in txt:
+                left, right = [x.strip() for x in txt.split('|', maxsplit=1)]
                 if is_numeric(left):
                     if source_exists(left):
                         return f"[[@{left}]]"
+                    return right
                 if entity_exists(left):
                     return f"[[{left} | {right}]]"
-                else:
-                    # keep just the right text
-                    return right
+                return right  # fallback
 
-            # Case: [[123]] => source reference?
-            if is_numeric(text):
-                if source_exists(text):
-                    return f"[[@{text}]]"
+            # Case: numeric => [[@N]] if source
+            if is_numeric(txt):
+                if source_exists(txt):
+                    return f"[[@{txt}]]"
                 else:
                     return ""
-                
-            if len(text) and text[0] == '@':
-                if source_exists(text[1:]):
-                    return f"[[{text}]]"
+
+            # Case: @number => treat as source if it exists
+            if len(txt) > 1 and txt[0] == '@':
+                num = txt[1:]
+                if source_exists(num):
+                    return f"[[{txt}]]"
                 else:
-                    return "" 
+                    return ""
 
             # Otherwise treat as entity reference
-            if entity_exists(text):
-                return f"[[{text}]]"
-            
-            return text
+            if entity_exists(txt):
+                return f"[[{txt}]]"
+            return txt
 
-        pattern_double_bracket = re.compile(r'\[\[([^\]]+)\]\]')
+        # (b) Detect if the text is a comma-separated list of references (e.g. "@1], [@2]")
+        # NEW: We'll use a pattern that matches e.g. `[?@?digits]` repeated with commas.
+        # If it doesn't match, we treat it as a single reference.
+        pattern_multiple_refs = re.compile(
+            r'^\s*(?:\[?\s*@?\d+\s*\]?)(?:\s*,\s*\[?\s*@?\d+\s*\]?)+\s*$'
+        )
+
+        # (c) Replace function for the double brackets
+        def replace_double_bracket(m: Match) -> str:
+            text = m.group(1)  # everything inside [[...]]
+            text_stripped = text.strip()
+
+            # If it clearly looks like multiple references, split them up.
+            if pattern_multiple_refs.match(text_stripped):
+                parts = re.split(r'\s*,\s*', text_stripped)
+                results = []
+                for part in parts:
+                    # remove surrounding brackets from each chunk if present
+                    part = part.strip('[] ')
+                    results.append(handle_single_reference(part))
+                return "".join(results)
+
+            # Otherwise, handle it as a single reference or entity
+            return handle_single_reference(text_stripped)
+
+        # Use a pattern that captures everything up to the next "]]"
+        pattern_double_bracket = re.compile(r'\[\[(.*?)\]\]')
         markdown = pattern_double_bracket.sub(replace_double_bracket, markdown)
+
+        # ------------------------------------------------------------------------
+        # 4) Transform single-bracket sources [@2] 
+        # ------------------------------------------------------------------------
+        def replace_single_bracket_reference(m: Match) -> str:
+            inside = m.group(1).strip()  # e.g. "@2" or "42"
+            print(inside)
+            # If it starts with @, parse the numeric part
+            if inside.startswith('@'):
+                num_str = inside[1:]
+                if is_numeric(num_str) and source_exists(num_str):
+                    return f"[[{inside}]]"  # e.g. [[@2]]
+                else:
+                    return ""  # remove
+            else:
+                # If it's numeric, try to convert to [@N]
+                if is_numeric(inside) and source_exists(inside):
+                    return f"[[@{inside}]]"
+                else:
+                    return f"[{inside}]"  # keep the same
+
+        # Pattern matches [@123] or [123] but not [anything else] and not [[2]]
+        # We exclude ! so we don't catch image syntax ![...]
+        pattern_single_bracket_ref = re.compile(r'(?<!\!)\[(?!\[)(@?\d+)\](?!\])')
+        markdown = pattern_single_bracket_ref.sub(replace_single_bracket_reference, markdown)
 
         return markdown
 
@@ -579,7 +635,7 @@ class Wiki():
                 references = "In order to cite a source using a footnote, use the syntax '[[@SOURCE_ID]]', with the @ sign. For example, a footnote to source with ID 15 would be [[@15]]. WHENEVER YOU CITE A SOURCE (as opposed to another article) YOU MUST USE THE AT (@) SIGN. **Please include inline references whenever possible!** But do not write them in a separate section."
                 
                 example_instruct = "Here is an example of what some content might look like in a hypothetical page:"
-                example = "Among Napoleon's most important early victories was at the [[Siege of Toulon]], which took place during the [[federalist revolts]]. Napoleon instantly won fame when his plan was credited as being the decisive factor in the battle.[[@14]] He would later parlay his fame into commanding an army to lead an invasion of Italy."
+                example = "Among Napoleon's most important early victories was at the [[Siege of Toulon]], which took place during the [[federalist revolts]]. Napoleon instantly won fame when his plan was credited as being the decisive factor in the battle.[[@14]] He would later parlay his fame into commanding an army to lead an invasion of Italy.[[@19]][[@3]]"
 
                 conclusion = "Now the user will specify the actual wiki page you are tasked with writing."
                 system = "\n\n".join([intro, links, all_entity_text, source_instruct, source_text, references, example_instruct, example, conclusion])
