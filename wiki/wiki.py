@@ -41,11 +41,16 @@ class Wiki():
         conn: sqlite3.Connection = sqlite3.connect(self.path)
         conn.row_factory = obj_factory
         self.conn = conn
+        self._migrate_db()
+    
 
+    def _migrate_db(self):
+        # Only actually does the migration if necessary
         path, conn = migrate_db(self.path, self.conn)
         self.path = path
         self.conn = conn
-    
+
+
     # Just pass the object with the appropriate dataclass, and it will naturally just work
     def _insert_row(self, item):
         dataclass = type(item)

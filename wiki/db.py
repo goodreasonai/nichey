@@ -229,7 +229,8 @@ def dict_factory(cursor, row):
 
 # Migrates the user's database to the current version
 # Will copy over all columns that still exist + add new ones (with null values)
-def migrate_db(path, conn: sqlite3.Connection):
+# Force is just for testing
+def migrate_db(path, conn: sqlite3.Connection, force=False):
     sql = "PRAGMA user_version"
     res = conn.execute(sql)
     version = res.fetchone()['user_version']
