@@ -635,7 +635,7 @@ class Wiki():
                 references = "In order to cite a source using a footnote, use the syntax '[[@SOURCE_ID]]', with the @ sign. For example, a footnote to source with ID 15 would be [[@15]]. WHENEVER YOU CITE A SOURCE (as opposed to another article) YOU MUST USE THE AT (@) SIGN. **Please include inline references whenever possible!** But do not write them in a separate section."
                 
                 example_instruct = "Here is an example of what some content might look like in a hypothetical page:"
-                example = "Among Napoleon's most important early victories was at the [[Siege of Toulon]], which took place during the [[federalist revolts]]. Napoleon instantly won fame when his plan was credited as being the decisive factor in the battle.[[@14]] He would later parlay his fame into commanding an army to lead an invasion of Italy.[[@19]][[@3]]"
+                example = "## Early Victories\nAmong Napoleon's most important early victories was at the [[Siege of Toulon]], which took place during the [[federalist revolts]]. Napoleon instantly won fame when his plan was credited as being the decisive factor in the battle.[[@14]] He would later parlay his fame into commanding an army to lead an invasion of Italy.[[@19]][[@3]]"
 
                 conclusion = "Now the user will specify the actual wiki page you are tasked with writing."
                 system = "\n\n".join([intro, links, all_entity_text, source_instruct, source_text, references, example_instruct, example, conclusion])
