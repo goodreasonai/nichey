@@ -105,39 +105,113 @@ def test_make_entities():
 
 def test_scrape_web_results():
     mywiki = wiki.Wiki(path=get_tmp_path(), topic="")
-    results = [wiki.WebLink(url="https://goodreason.ai")]
-    scraper = wiki.RequestsScraper()
-    mywiki.scrape_web_results(scraper, results)
+    try:
+        results = [wiki.WebLink(url="https://goodreason.ai")]
+        scraper = wiki.RequestsScraper()
+        mywiki.scrape_web_results(scraper, results)
 
-    sources = mywiki.get_all_sources()
-    assert(len(sources) == 1)
-    sources = mywiki.search_sources_by_text("Gordon Kamer")
-    assert(len(sources) == 1)
+        sources = mywiki.get_all_sources()
+        assert(len(sources) == 1)
+        sources = mywiki.search_sources_by_text("Gordon Kamer")
+        assert(len(sources) == 1)
+    finally:
+        os.remove(mywiki.path)
 
 
 def test_write_entities():
     mywiki = wiki.Wiki(path=get_tmp_path(), topic="I'm interested the history of technology of the middle of the 20th century.")
-    lm = wiki.OpenAILM(model="gpt-4o-mini", max_input_tokens=128_000, accepts_images=True, api_key=OPENAI_API_KEY)
-    url = "https://en.wikipedia.org/wiki/John_Bardeen"
-    scraper = wiki.RequestsScraper()
-    results = [wiki.WebLink(url=url)]
-    mywiki.scrape_web_results(scraper, results)
-    sources = mywiki.search_sources_by_text("John Bardeen")
-    assert(len(sources))
 
-    # Rather than extract (which is not being tested here, just skip to write)
-    mywiki.add_entity(title="John Bardeen", type="person", desc="John Bardeen was a co-inventor of the transistor and is known for winning two Nobel Prizes.")
-    entities = mywiki.write(lm)
-    assert(len(entities))
-    assert(entities[0].is_written)
-    assert(entities[0].markdown)
+    try:
+        lm = wiki.OpenAILM(model="gpt-4o-mini", max_input_tokens=128_000, accepts_images=True, api_key=OPENAI_API_KEY)
+        url = "https://en.wikipedia.org/wiki/John_Bardeen"
+        scraper = wiki.RequestsScraper()
+        results = [wiki.WebLink(url=url)]
+        mywiki.scrape_web_results(scraper, results)
+        sources = mywiki.search_sources_by_text("John Bardeen")
+        assert(len(sources))
+
+        # Rather than extract (which is not being tested here, just skip to write)
+        mywiki.add_entity(title="John Bardeen", type="person", desc="John Bardeen was a co-inventor of the transistor and is known for winning two Nobel Prizes.")
+        entities = mywiki.write_articles(lm)
+        assert(len(entities))
+        assert(entities[0].is_written)
+        assert(entities[0].markdown)
+    finally:
+        os.remove(mywiki.path)
 
 
 def test_local_sources():
     mywiki = wiki.Wiki(path=get_tmp_path(), topic="")
-    paths = ['America Against America.pdf']
-    mywiki.load_local_sources(paths)
-    results = mywiki.search_sources_by_text("America Against America")
-    assert(len(results) == 1)
-    assert(results[0].title == 'America Against America.pdf')
-    assert(len(results[0].text) > 1000)
+    try:
+        paths = ['America Against America.pdf']
+        mywiki.load_local_sources(paths)
+        results = mywiki.search_sources_by_text("America Against America")
+        assert(len(results) == 1)
+        assert(results[0].title == 'America Against America.pdf')
+        assert(len(results[0].text) > 1000)
+    finally:
+        os.remove(mywiki.path)
+
+
+def test_heal():
+    """
+    Would like to:
+
+    - Transform [Bad](link) to [[Bad | link]]
+    - Transform [1](1) to [[@1]]
+    - Transform [[1]] to [[@1]]
+    - Transform [1] to [[@1]]
+    - Transform [[1 | source]] to [[@1]]
+    - Transform [[Bad]](link) to [[Bad | link]]
+    - Ensure all internal links go to an existing entity
+    - Ensure all source references go to an existing source
+
+    """
+    mywiki = wiki.Wiki(path=get_tmp_path(), topic="")
+    try:
+        existing_ent = mywiki.add_entity(
+            title="Brunswick School",
+            desc="A boys school in Greenwich, CT",
+            type="organization"
+        )
+        assert(existing_ent.slug == 'brunswick-school')
+
+        existing_src: wiki.Source = mywiki.add_source(
+            title="GEORGE CARMICHAEL, HEADED DAY SCHOOL",
+            text="WOLFEBORO, N. H., March 21—George E. Carmichael, founder of the Brunswick School, a country day school for boys in Greenwich, Conn., died at his home here yesterday. He was 88 years old.",
+            author="New York Times"
+        )
+        assert(existing_src.id == 1)
+
+        new_ent = mywiki.add_entity(
+            title="George Carmichael",
+            type="person",
+            desc="Founder of Brunswick School"
+        )
+        assert(new_ent.slug == 'george-carmichael')
+
+        # We'll ignore the fact that this string will technically have erroneous tabs
+        bad_markdown = """
+            # George Carmichael
+            George Carmichael founded [[Brunswick School]] in 1902 in [[Greenwich, CT]].[1](1)
+            See: [[ founding-of-wick | Founding of Brunswick School ]].
+            The [[brunswick-school | school]] was founded as an all boys version of Greenwich Academy, which would go on to admit only girls.
+            [Brunswick's](brunswick-school) motto is "Courage, Honor, Truth", which was selected by a vote of students shortly after the school's founding.
+            [[Carmichael]](george-carmichael) graduated from Bowdoin College in 1897.[[@1]].
+            He was also active in Greenwich Civic life.[[1]][[2]]
+            Carmichael died aged 88.[[1 | source]]
+        """
+        good_markdown = """
+            # George Carmichael
+            George Carmichael founded [[Brunswick School]] in 1902 in Greenwich, CT.[[@1]]
+            See: Founding of Brunswick School.
+            The [[brunswick-school | school]] was founded as an all boys version of Greenwich Academy, which would go on to admit only girls.
+            [[brunswick-school | Brunswick's]] motto is "Courage, Honor, Truth", which was selected by a vote of students shortly after the school's founding.
+            [[george-carmichael | Carmichael]] graduated from Bowdoin College in 1897.[[@1]].
+            He was also active in Greenwich Civic life.[[@1]]
+            Carmichael died aged 88.[[@1]]
+        """
+        new_markdown = mywiki.heal_markdown(bad_markdown)
+        assert(new_markdown == good_markdown)
+    finally:
+        os.remove(mywiki.path)

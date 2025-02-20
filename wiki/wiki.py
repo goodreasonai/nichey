@@ -15,6 +15,7 @@ import re
 from .logger import logger
 from tqdm import tqdm
 import logging
+from typing import Match
 
 
 class Wiki():
@@ -243,11 +244,10 @@ class Wiki():
         )
         self._update_row(entity)
     
-    def add_source(self, title: str, text: str, author: str=None, desc: str=None, url: str=None, snippet: str=None, query: str=None, search_engine: str=None, are_entities_extracted=False):
+    def add_source(self, title: str, text: str, author: str=None, desc: str=None, url: str=None, snippet: str=None, query: str=None, search_engine: str=None, are_entities_extracted=False) -> Source:
         source = Source(title=title, text=text, author=author, desc=desc, url=url, snippet=snippet, query=query, search_engine=search_engine, are_entities_extracted=are_entities_extracted)
         source = self._insert_row(source)
         return source
-    
 
     # TODO: allow breaking up by pages when supported
     def load_local_sources(self, paths: list[str]) -> list[Source]:
@@ -347,7 +347,7 @@ class Wiki():
         if not len(sources):
             logger.warning("No sources found to make entities from.")
         
-        total = min(len(sources), max_sources) if max_sources is not None else sources
+        total = min(len(sources), max_sources) if max_sources is not None else len(sources)
         processed = []
         for i in tqdm(range(total), total=total, desc="Extracting"):
             src: Source = sources[i]
@@ -418,13 +418,198 @@ class Wiki():
         return processed
 
 
-    def write(self, lm: LM, max_n=None, rewrite=False) -> list[Entity]:
+    def heal_markdown(self, markdown: str) -> str:
+        """
+        Tries to fix various malformed or inconsistent markdown link patterns to match:
+        - [[slug | Entity Title]]
+        - [[@ID]] for sources
+        Removes or downgrades links if corresponding entity/source doesn't exist.
+        """
+
+        # --- Helper functions ---
+        def is_numeric(s: str) -> bool:
+            return s.isdigit()
+
+        def source_exists(num_str: str) -> bool:
+            src = self.get_source_by_id(num_str)
+            return src is not None
+
+        def entity_exists(slug_or_title: str) -> bool:
+            slug_or_title = slugify(slug_or_title)
+            entity = self.get_entity_by_slug(slug_or_title)
+            exists = entity is not None
+            return exists
+
+        # We'll perform multiple passes with regex to handle bracket patterns.
+
+        # For whatever god damn reason, the AI might use lookalike characters (like 【)
+        markdown = markdown.replace("【", "[").replace("】", "]")
+
+        # 1) Transform markdown links of the form [text](link)
+        #    e.g. [Bad](link) => [[link | Bad]]
+        #         [1](1)     => [[@1]] (if source with ID=1 exists)
+        def replace_square_paren(m: Match) -> str:
+            text = m.group(1).strip()
+            link = m.group(2).strip()
+            if is_numeric(text) and is_numeric(link) and text == link:
+                # This is likely a source reference [1](1)
+                if source_exists(text):
+                    return f"[[@{text}]]"
+                else:
+                    return text  # or remove it entirely
+            if is_numeric(text):
+                # Possibly a source reference if text is ID
+                if source_exists(text):
+                    return f"[[@{text}]]"
+                else:
+                    return text
+            # Otherwise treat it as entity
+            if entity_exists(link):
+                # We have [title](slug)
+                return f"[[{link} | {text}]]"
+            else:
+                # Link doesn't exist -> remove the slug but keep the text
+                return text
+
+        pattern_square_paren = re.compile(r'\[([^\]]+)\]\(([^\)]+)\)')
+        markdown = pattern_square_paren.sub(replace_square_paren, markdown)
+
+        # 2) Transform double-bracket-with-paren: [[text]](link)
+        #    e.g. [[Bad]](slug) => [[slug | Bad]]
+        #         [[1]](1) => [[@1]] if #1 is a source
+        def replace_double_bracket_paren(m: Match) -> str:
+            text = m.group(1).strip()
+            link = m.group(2).strip()
+            if is_numeric(text) and is_numeric(link) and text == link:
+                if source_exists(text):
+                    return f"[[@{text}]]"
+                else:
+                    return text
+            # else treat as entity
+            if entity_exists(link):
+                return f"[[{link} | {text}]]"
+            else:
+                return text
+
+        pattern_double_bracket_paren = re.compile(r'\[\[([^\]]+)\]\]\(([^\)]+)\)')
+        markdown = pattern_double_bracket_paren.sub(replace_double_bracket_paren, markdown)
+
+        # 3) Transform double-bracket references [[text]].
+        #    If text is numeric => [[@N]] if source exists.
+        #    If text has a bar => assume it's [[ Title | slug ]] and check validity.
+        #    Otherwise check if entity exists by that text or slug.
+        def replace_double_bracket(m: Match) -> str:
+            text = m.group(1).strip()
+
+            # Case: [[slug | Title]]
+            if '|' in text:
+                left, right = [x.strip() for x in text.split('|', maxsplit=1)]
+                if is_numeric(left):
+                    if source_exists(left):
+                        return f"[[@{left}]]"
+                if entity_exists(left):
+                    return f"[[{left} | {right}]]"
+                else:
+                    # keep just the right text
+                    return right
+
+            # Case: [[123]] => source reference?
+            if is_numeric(text):
+                if source_exists(text):
+                    return f"[[@{text}]]"
+                else:
+                    return ""
+                
+            if len(text) and text[0] == '@':
+                if source_exists(text[1:]):
+                    return f"[[{text}]]"
+                else:
+                    return "" 
+
+            # Otherwise treat as entity reference
+            if entity_exists(text):
+                return f"[[{text}]]"
+            
+            return text
+
+        pattern_double_bracket = re.compile(r'\[\[([^\]]+)\]\]')
+        markdown = pattern_double_bracket.sub(replace_double_bracket, markdown)
+
+        return markdown
+
+
+    def write_article(self, lm: LM, ent: Entity) -> Entity | None:
+
         all_entity_text = ""
         
         all_entities: list[Entity] = self.get_all_entities()
-        all_entities_info = [(x.title, x.slug) for x in all_entities]
-        all_entity_text = "\n".join([f"[{x[0]}]({x[1]})" for x in all_entities_info])
+        all_entities_info = [(x.slug, x.title) for x in all_entities]
+        all_entity_text = "\n".join([f"[[{x[0]} | {x[1]}]]" for x in all_entities_info])
 
+        matching_sources = self.search_sources_by_text(ent.title)
+        direct_sources = self.get_referenced_sources(entity_id=ent.id)
+
+        logger.debug(f"Matching Sources Found: {len(matching_sources)}")
+        logger.debug(f"Direct Sources Found: {len(direct_sources)}")
+
+        # Combine the results of both queries, ensuring no duplicates
+        matches_ids = {match.id for match in matching_sources}
+        combined: list[Source] = matching_sources[:]
+        for src in direct_sources:
+            if src.id not in matches_ids:
+                combined.append(src)
+
+        logger.debug(f"Combined Sources Found: {len(combined)}")
+
+        # Now 'sources' contains all the Source objects associated with the matched SourcePrimaryData
+        if not len(combined):
+            logger.warning(f"No matching sources found for entity {ent.title}; moving on.")
+        else:
+            try:
+                intro = "You are tasked with writing a full wiki entry for some entity. This wiki is not a general wiki; it is meant to fulfill the research goals set by the user. The user will specify the page you are writing. You **must** write in well-formatted markdown."
+                links = "You can specify a link to another wiki entry in Wikilink format like: [[slug | Custom Text]] or [[ Title ]]. Whenever you mention some other entity, you should probably use a link. Here are all the entries in the wiki for your reference:"
+                all_entity_text = all_entity_text
+                source_instruct = "Below are sources from which you can draw material for your wiki entry. **Use only these sources for the information in your entry. You may not draw from any other outside information you may have.** You'll use the sources' ID numbers to write your citations."
+                source_text = make_retrieval_prompt(lm, [data.text for data in combined], prefixes=[f"<START OF SOURCE WITH ID={data.id}>\n{data.title} {'| URL: ' + data.url if data.url else ''}" for data in combined], suffixes=[f"</END OF SOURCE WITH ID={data.id}>" for data in combined])
+                references = "In order to cite a source using a footnote, use the syntax '[[@SOURCE_ID]]', with the @ sign. For example, a footnote to source with ID 15 would be [[@15]]. WHENEVER YOU CITE A SOURCE (as opposed to another article) YOU MUST USE THE AT (@) SIGN. **Please include inline references whenever possible!** But do not write them in a separate section."
+                
+                example_instruct = "Here is an example of what some content might look like in a hypothetical page:"
+                example = "Among Napoleon's most important early victories was at the [[Siege of Toulon]], which took place during the [[federalist revolts]]. Napoleon instantly won fame when his plan was credited as being the decisive factor in the battle.[[@14]] He would later parlay his fame into commanding an army to lead an invasion of Italy."
+
+                conclusion = "Now the user will specify the actual wiki page you are tasked with writing."
+                system = "\n\n".join([intro, links, all_entity_text, source_instruct, source_text, references, example_instruct, example, conclusion])
+
+                user_prompt_intro = f"You are writing the wiki entry for {ent.title}."
+                user_prompt_disambiguation = f"A brief description of this entity for disambiguation: {ent.desc}"
+                user_prompt_topic = f"The goal of the wiki is to fulfill this research goal: {self.topic}"
+                prompt = "\n".join([user_prompt_intro, user_prompt_disambiguation, user_prompt_topic])
+                
+                logger.debug(f"Write System Prompt:\n\n{system}")
+                logger.debug(f"Write User Prompt:\n\n{prompt}")
+                logger.debug(f"Write User Prompt Length: {get_token_estimate(prompt)}")
+                logger.debug(f"Write System Prompt Length: {get_token_estimate(system)}")
+
+                lm_resp: LMResponse = lm.run(prompt, system, [])
+
+                new_markdown = lm_resp.text
+
+                logger.debug(f"Raw Markdown:\n\n{new_markdown}")
+                # Run a fix of common formatting issues
+                new_markdown = self.heal_markdown(new_markdown)
+                logger.debug(f"Fixed Markdown:\n\n{new_markdown}")
+
+                ent.markdown = new_markdown
+                ent.is_written = True
+                self._update_row(ent)
+                return ent
+
+            except:
+                logger.debug(traceback.format_exc())
+                logger.error(f"An exception occurred trying to write entry for {ent.slug}. Moving on.")
+
+
+    def write_articles(self, lm: LM, max_n=None, rewrite=False) -> list[Entity]:
+        all_entities: list[Entity] = self.get_all_entities()
         if rewrite:
             entities = list(all_entities)
         else:
@@ -433,57 +618,9 @@ class Wiki():
         total = min(len(entities), max_n) if max_n is not None else len(entities)
         for i in tqdm(range(total), desc="Writing", disable=logger.level > logging.INFO):
             ent: Entity = entities[i]
-
-            logger.debug(f"Writing entity '{ent.title}'")
-
-            matching_sources = self.search_sources_by_text(ent.title)
-            direct_sources = self.get_referenced_sources(entity_id=ent.id)
-
-            logger.debug(f"Matching Sources Found: {len(matching_sources)}")
-            logger.debug(f"Direct Sources Found: {len(direct_sources)}")
-
-            # Combine the results of both queries, ensuring no duplicates
-            matches_ids = {match.id for match in matching_sources}
-            combined: list[Source] = matching_sources[:]
-            for src in direct_sources:
-                if src.id not in matches_ids:
-                    combined.append(src)
-
-            logger.debug(f"Combined Sources Found: {len(combined)}")
-
-            # Now 'sources' contains all the Source objects associated with the matched SourcePrimaryData
-            if not len(combined):
-                logger.warning(f"No matching sources found for entity {ent.title}; moving on.")
-            else:
-                try:
-                    intro = "You are tasked with writing a full wiki entry for some entity. This wiki is not a general wiki; it is meant to fulfill the research goals set by the user. The user will specify the page you are writing. You **must** write in well-formatted markdown."
-                    links = "You can specify a link to another wiki entry like: [[slug | Title]]. Whenever you mention some other entity, you should probably use a link. Here are all the entries in the wiki for your reference:"
-                    all_entity_text = all_entity_text
-                    source_instruct = "Below are sources from which you can draw material for your wiki entry. **Use only these sources for the information in your entry. You may not draw from any other outside information you may have.**"
-                    source_text = make_retrieval_prompt(lm, [data.text for data in combined], prefixes=[f"<START OF SOURCE WITH ID {data.id}>" for data in combined], suffixes=[f"</END OF SOURCE WITH ID {data.id}>" for data in combined])
-                    references = "In order to cite a source using a footnote, use the syntax '[[@SOURCE_ID]]', with the @ sign. For example, a footnote to source with ID 15 would be [[@15]]. A link to the proper source will be automatically placed; DO NOT WRITE A FOOTNOTES OR REFERENCES SECTION. THEY WILL BE AUTOMATICALLY INCLUDED. WHENEVER YOU CITE A SOURCE (as opposed to another article) YOU MUST USE THE AT (@) SIGN."
-                    conclusion = "Now the user will specify which wiki page you are tasked with writing."
-                    system = "\n\n".join([intro, links, all_entity_text, source_instruct, source_text, references, conclusion])
-
-                    user_prompt_intro = f"You are writing the wiki entry for {ent.title} ({ent.slug})."
-                    user_prompt_disambiguation = f"A brief description of this entity for disambiguation: {ent.desc}"
-                    user_prompt_topic = f"The goal of the wiki is to fulfill this research goal: {self.topic}"
-                    prompt = "\n".join([user_prompt_intro, user_prompt_disambiguation, user_prompt_topic])
-                    
-                    logger.debug(f"Write User Prompt Length: {get_token_estimate(prompt)}")
-                    logger.debug(f"Write System Prompt Length: {get_token_estimate(system)}")
-
-                    lm_resp: LMResponse = lm.run(prompt, system, [])
-                    new_markdown = lm_resp.text
-                    
-                    ent.markdown = new_markdown
-                    ent.is_written = True
-                    self._update_row(ent)
-                    written.append(ent)
-
-                except:
-                    logger.debug(traceback.format_exc())
-                    logger.error(f"An exception occurred trying to write entry for {ent.slug}. Moving on.")
+            new_entity = self.write_article(lm, ent)
+            if new_entity:
+                written.append(new_entity)
 
         return written
 
