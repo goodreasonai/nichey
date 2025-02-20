@@ -1,7 +1,7 @@
 import wiki
 from .utils import get_tmp_path
 import os
-from .secrets import OPENAI_API_KEY
+from .lm import get_lm
 
 
 def test_entities():
@@ -81,7 +81,7 @@ def test_make_entities():
                 The Mets would go on to win the game and the series.
             """
         )
-        lm = wiki.OpenAILM(model="gpt-4o-mini", max_input_tokens=128_000, accepts_images=True, api_key=OPENAI_API_KEY)
+        lm = get_lm()
         details = mywiki.make_entities(lm)
         entities: list[wiki.Entity] = []
         for d in details:
@@ -120,9 +120,8 @@ def test_scrape_web_results():
 
 def test_write_entities():
     mywiki = wiki.Wiki(path=get_tmp_path(), topic="I'm interested the history of technology of the middle of the 20th century.")
-
+    lm = get_lm()
     try:
-        lm = wiki.OpenAILM(model="gpt-4o-mini", max_input_tokens=128_000, accepts_images=True, api_key=OPENAI_API_KEY)
         url = "https://en.wikipedia.org/wiki/John_Bardeen"
         scraper = wiki.RequestsScraper()
         results = [wiki.WebLink(url=url)]
