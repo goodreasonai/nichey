@@ -45,8 +45,22 @@ def test_migration():
     finally:
         os.remove(mywiki.path)
 
-    
 
+def test_integrity():
+    tmp_path = get_tmp_path()
+    mywiki = wiki.Wiki(topic="", path=tmp_path)
+    try:
+        new_ent: wiki.Entity = mywiki.add_entity(title="My Entity")
+        new_src: wiki.Source = mywiki.add_source(title="My Source", text="")
+        ref = mywiki.add_reference(entity_id=new_ent.id, source_id=new_src.id)
+        assert(ref)
+        lst = mywiki.get_referenced_sources(entity_id=new_ent.id)
+        assert(len(lst))
+        mywiki.delete_source_by_id(new_src.id)
+        lst = mywiki.get_referenced_sources(entity_id=new_ent.id)
+        assert(not len(lst))
+        ent = mywiki.get_entity_by_slug(new_ent.slug)
+        assert(ent)
 
-
-
+    finally:
+        os.remove(mywiki.path)

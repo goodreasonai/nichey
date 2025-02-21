@@ -16,6 +16,7 @@ from .logger import logger
 from tqdm import tqdm
 import logging
 from typing import Match
+from .exceptions import EntityNotExists, SourceNotExists
 
 
 class Wiki():
@@ -194,6 +195,17 @@ class Wiki():
         refs: list[Reference] = self._match_rows(ref, limit=limit, offset=offset)
         sources = self._get_rows_by_ids(Source, [ref.source_id for ref in refs])
         return sources
+    
+    def add_reference(self, entity_id, source_id):
+        ent = self._match_row(Entity(id=entity_id))
+        if not ent:
+            raise EntityNotExists(f"Couldn't find entity with ID {entity_id}; make sure you're passing the ID and not the slug!")
+        src = self.get_source_by_id(source_id)
+        if not src:
+            raise SourceNotExists(f"Couldn't find source with id {source_id}")
+        ref = Reference(entity_id=entity_id, source_id=source_id)
+        new_ref: Reference = self._insert_row(ref)
+        return new_ref
 
     def get_all_sources(self, limit=5000, offset=0) -> list[Source]:
         return self._match_rows(Source(), limit=limit, offset=offset, order_by=['title'])

@@ -7,7 +7,7 @@ import os
 from .logger import logger
 
 
-DB_VERSION = 2  # Incremement when making changes to the schema to force auto migration
+DB_VERSION = 3  # Incremement when making changes to the schema to force auto migration
 
 ENTITY_TYPES = ["person", "place", "organization", "event", "publication", "law", "product", "object", "concept"]
 
@@ -140,8 +140,8 @@ def create_db(path):
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             mimetype TEXT,
             data BLOB,
-
-            tbl TEXT DEFAULT 'primary_source_data'
+            tbl TEXT DEFAULT 'primary_source_data',
+            FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
         )
         """
         cursor.execute(sql)
@@ -154,8 +154,8 @@ def create_db(path):
                 mimetype TEXT,
                 data BLOB,
                 place INTEGER,
-
-                tbl TEXT DEFAULT 'screenshot_data'
+                tbl TEXT DEFAULT 'screenshot_data',
+                FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
             )
         """
         cursor.execute(sql)
@@ -185,8 +185,10 @@ def create_db(path):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 source_id INTEGER,
                 entity_id INTEGER,
-
-                tbl TEXT DEFAULT 'refs'
+                tbl TEXT DEFAULT 'refs',
+                FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE,
+                FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE,
+                UNIQUE (source_id, entity_id)
             )
         """
         cursor.execute(sql)

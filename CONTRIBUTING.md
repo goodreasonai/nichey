@@ -4,6 +4,8 @@ Thank you for your interest in contributing to this project!
 
 Refer here **(TODO)** for details on how to set up your development environment.
 
+**TODO** use [this](https://mozillascience.github.io/working-open-workshop/contributing/)
+
 There are a variety of ways to help:
 
 **Creating a Wrapper**
