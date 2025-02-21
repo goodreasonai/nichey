@@ -698,6 +698,43 @@ class Wiki():
         return written
 
 
+    def deduplicate_entities(self, lm: LM, max_groups=None, group_size=100) -> int:
+        all_entities = self.get_all_entities()
+        # Bunch them 100 at a time (give or take)
+        groups: list[list[Entity]] = []
+        i = 0
+        while True:
+            new_group = all_entities[i:i+group_size]
+            if len(new_group) < 3:
+                groups[-1].extend(new_group)
+                break
+            elif len(new_group):
+                groups.append(new_group)
+            else:
+                break
+            i += group_size
+
+        total = min(len(groups), max_groups) if max_groups is not None else len(groups)
+        n = 0
+        for i in tqdm(range(total), desc="Culling", disable=logger.level > logging.INFO):
+            this_group = groups[i]
+            system = "You are tasked with deduplicating a group of entity titles. Given a list of titles, return a well-formatted JSON object consisting of deduplicated titles. You should combine titles that refer to the same thing or concept. If a title is the plural of another, combine them, leaving only the singular form. You must give a complete list of all the titles that remain. The user will provide the list of titles."
+            user = "\n".join([x.title for x in this_group])
+
+            class Deduplicated(BaseModel):
+                deduplicated_titles: list[str]
+
+            resp: LMResponse = lm.run(user, system, [], json_schema=Deduplicated)
+            parsed: Deduplicated = resp.parsed
+            deduped_table = {slugify(k): True for k in parsed.deduplicated_titles}
+            for ent in this_group:
+                ent: Entity
+                if ent.slug not in deduped_table:
+                    self.delete_entity_by_slug(ent.slug)
+                    n += 1
+        return n
+
+
     def export(self, dir="output", remove_cross_refs=True, remove_source_refs=True):
         all_written_entities: list[Entity] = self._match_rows(Entity(is_written=True))
         if not os.path.exists(dir):

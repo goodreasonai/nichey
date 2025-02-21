@@ -187,8 +187,7 @@ def create_db(path):
                 entity_id INTEGER,
                 tbl TEXT DEFAULT 'refs',
                 FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE,
-                FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE,
-                UNIQUE (source_id, entity_id)
+                FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE
             )
         """
         cursor.execute(sql)
@@ -297,4 +296,5 @@ def migrate_db(path, conn: sqlite3.Connection, force=False):
 
     # Remove the old database and attach new one
     os.remove(path)
-    return db_path, new_conn
+    os.rename(db_path, path)
+    return path, new_conn

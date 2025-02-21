@@ -2,6 +2,7 @@ import wiki
 from .utils import get_tmp_path
 import os
 from .lm import get_lm
+from slugify import slugify
 
 
 def test_entities():
@@ -223,5 +224,50 @@ def test_heal():
         """
         new_markdown = mywiki.heal_markdown(bad_markdown)
         assert(new_markdown == good_markdown)
+    finally:
+        os.remove(mywiki.path)
+
+
+def test_deduplicate():
+    mywiki = wiki.Wiki(path=get_tmp_path(), topic="")
+    try:
+        mywiki.add_entity("Code Napoleon")
+        mywiki.add_entity("Color")
+        mywiki.add_entity("Colour")
+        mywiki.add_entity("Electronics")
+        mywiki.add_entity("Electricity and Magnetism")
+        mywiki.add_entity("Greenwich, CT")
+        mywiki.add_entity("Greenwich Mean Time")
+        mywiki.add_entity("Greenwich Mean Time (GMT)")
+        mywiki.add_entity("New York")
+        mywiki.add_entity("The Napoleonic Code")
+        mywiki.add_entity("The Napoleonic Code (Code Napoleon)")
+        mywiki.add_entity("York, England")
+
+        mywiki.deduplicate_entities(lm=get_lm(), group_size=5)
+
+        code_napoleon = bool(mywiki.get_entity_by_slug(slugify("Code Napoleon")))
+        color = bool(mywiki.get_entity_by_slug(slugify("Color")))
+        colour = bool(mywiki.get_entity_by_slug(slugify("Colour")))
+        electronics = bool(mywiki.get_entity_by_slug(slugify("Electronics")))
+        electricity_and_magnetism = bool(mywiki.get_entity_by_slug(slugify("Electricity and Magnetism")))
+        greenwich_ct = bool(mywiki.get_entity_by_slug(slugify("Greenwich, CT")))
+        greenwich_mean_time = bool(mywiki.get_entity_by_slug(slugify("Greenwich Mean Time")))
+        greenwich_mean_time_gmt = bool(mywiki.get_entity_by_slug(slugify("Greenwich Mean Time (GMT)")))
+        new_york = bool(mywiki.get_entity_by_slug(slugify("New York")))
+        the_napoleonic_code = bool(mywiki.get_entity_by_slug(slugify("The Napoleonic Code")))
+        the_napoleonic_code_code_napoleon = bool(mywiki.get_entity_by_slug(slugify("The Napoleonic Code (Code Napoleon)")))
+        york_england = bool(mywiki.get_entity_by_slug(slugify("York, England")))
+
+        assert(code_napoleon)  # Because of grouping, this should still exist
+        assert(sum([the_napoleonic_code, the_napoleonic_code_code_napoleon]) == 1)
+        assert(sum([color, colour]) == 1)
+        assert(electronics)
+        assert(electricity_and_magnetism)
+        assert(greenwich_ct)
+        assert(sum([greenwich_mean_time_gmt, greenwich_mean_time]) == 1)
+        assert(new_york)
+        assert(york_england)
+
     finally:
         os.remove(mywiki.path)
