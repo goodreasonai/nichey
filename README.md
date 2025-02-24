@@ -51,7 +51,7 @@ OPENAI_API_KEY = "YOUR-API-KEY"
 lm = OpenAILM(model="gpt-4o-mini", max_input_tokens=128_000, api_key=OPENAI_API_KEY, base_url=None)
 
 # Optional: If you have a Bing API key, then you can use Bing to search for web sources (see https://www.microsoft.com/en-us/bing/apis/bing-web-search-api)
-# BING_API_KEY = "18c7580112914cf3947bcc4ef5d23cc1"
+# BING_API_KEY = "YOUR-API-KEY"
 # search_engine = Bing(BING_API_KEY)
 # queries: str = search_engine.gen_queries(lm, topic)
 # results, total = search_engine.search_many(queries)
