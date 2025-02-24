@@ -1,4 +1,4 @@
-import wiki
+import grwiki as wiki
 from .secrets import OPENAI_API_KEY, OPEN_ROUTER_API_KEY
 
 def get_lm(

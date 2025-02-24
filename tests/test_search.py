@@ -1,4 +1,4 @@
-import wiki
+import grwiki as wiki
 from .secrets import BING_API_KEY
 
 def test_bing():

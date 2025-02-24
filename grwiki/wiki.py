@@ -611,9 +611,13 @@ class Wiki():
         return markdown
 
 
-    def write_article(self, lm: LM, ent: Entity) -> Entity | None:
+    def write_article(self, lm: LM, entity_slug: str) -> Entity | None:
 
         all_entity_text = ""
+        
+        ent = self.get_entity_by_slug(entity_slug)
+        if not ent:
+            raise EntityNotExists(f"Cannot write an article for entity with slug '{entity_slug}' since it doesn't exist.")
         
         all_entities: list[Entity] = self.get_all_entities()
         all_entities_info = [(x.slug, x.title) for x in all_entities]
@@ -691,7 +695,7 @@ class Wiki():
         total = min(len(entities), max_n) if max_n is not None else len(entities)
         for i in tqdm(range(total), desc="Writing", disable=logger.level > logging.INFO):
             ent: Entity = entities[i]
-            new_entity = self.write_article(lm, ent)
+            new_entity = self.write_article(lm, ent.slug)
             if new_entity:
                 written.append(new_entity)
 

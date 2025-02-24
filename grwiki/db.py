@@ -297,4 +297,8 @@ def migrate_db(path, conn: sqlite3.Connection, force=False):
     # Remove the old database and attach new one
     os.remove(path)
     os.rename(db_path, path)
+
+    new_conn = sqlite3.connect(path)
+    new_conn.row_factory = obj_factory
+
     return path, new_conn

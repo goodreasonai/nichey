@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='wiki',
+    name='grwiki',
     version='0.0.1',
     packages=find_packages(),
     install_requires=[
@@ -20,7 +20,7 @@ setup(
     ],
     author='Gordon Kamer',
     author_email='gordon@goodreason.ai',
-    description='Build a wiki for any research topic',
+    description='Build a wiki for your research topic',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/goodreasonai/wiki',

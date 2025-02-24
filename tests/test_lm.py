@@ -1,4 +1,4 @@
-import wiki
+import grwiki as wiki
 from .lm import get_lm
 
 

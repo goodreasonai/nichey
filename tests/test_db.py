@@ -1,4 +1,4 @@
-import wiki
+import grwiki as wiki
 import sqlite3
 from .utils import get_tmp_path
 import os

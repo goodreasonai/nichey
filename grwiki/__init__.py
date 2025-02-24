@@ -4,5 +4,5 @@ from .scraper import ScrapeServ, Scraper, RequestsScraper, ScrapeDataConsumer, S
 from .wiki import Wiki
 from .db import Source, Entity
 from .logger import configure_logging
-from .exceptions import ContextExceeded
+from .exceptions import ContextExceeded, EntityNotExists, SourceNotExists
 from .utils import get_token_estimate

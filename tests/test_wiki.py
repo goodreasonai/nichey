@@ -1,4 +1,4 @@
-import wiki
+import grwiki as wiki
 from .utils import get_tmp_path
 import os
 from .lm import get_lm

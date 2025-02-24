@@ -25,7 +25,7 @@ class SearchEngine():
         raise NotImplementedError("Search not implemented")
 
     # Returns deduplicated results from many queries
-    def search_many(self, queries, max_per=10, offset_for_each=0):
+    def search_many(self, queries, max_per=10, offset_for_each=0) -> tuple[list[WebLink], int]:
         all_results = []
         all_urls = {}
         sum_total = 0
