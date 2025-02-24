@@ -3,7 +3,9 @@
 
 **Generate a wiki for your research topic, sourcing from the web and your docs**
 
-GRWiki is a python package that helps create and manage targeted wikis for a research topic you specify. After building a wiki, you can serve it locally on `localhost` or export the pages to markdown files. To developers, feel free to create GUI wrappers around GRWiki and let us know about them!
+GRWiki is a python package that helps create and manage targeted wikis for a research topic you specify. After building a wiki, you can serve it locally on `localhost` or export the pages to markdown files. To developers, feel free to create GUI wrappers around GRWiki and let us know about them.
+
+If you like this project, please leave a star!
 
 ## Installation
 
@@ -96,7 +98,7 @@ wiki.serve()
 
 ## Contributing
 
-Please do look at the open issues and consider constributing! This software is completely free and open source. You can create your own GUI wrappers or contribute core API functionality. For dev environement setup, refer below. Otherwise, see [CONTRIUBTING.md](./CONTRIBUTING.md)
+Please do look at the open issues and consider constributing! This software is completely free and open source. You can create your own GUI wrappers or contribute core API functionality. For dev environment setup, refer below. Otherwise, see [CONTRIUBTING.md](./CONTRIBUTING.md)
 
 Make a virtual environment and install the dev dependencies:
 
