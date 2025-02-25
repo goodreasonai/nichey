@@ -1,6 +1,6 @@
 
 
-from grwiki import OpenAILM, RequestsScraper, Wiki, WebLink
+from nichey import OpenAILM, RequestsScraper, Wiki, WebLink
 
 """
 

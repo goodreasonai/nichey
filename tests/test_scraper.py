@@ -1,4 +1,4 @@
-import grwiki as wiki
+import nichey as wiki
 
 # Need to have a ScrapeServ instance available at http://localhost:5006 (no API key)
 def test_scrape_serv():

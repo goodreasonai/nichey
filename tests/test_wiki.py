@@ -1,4 +1,4 @@
-import grwiki as wiki
+import nichey as wiki
 from .utils import get_tmp_path
 import os
 from .lm import get_lm

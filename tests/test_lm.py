@@ -1,4 +1,4 @@
-import grwiki as wiki
+import nichey as wiki
 from .lm import get_lm
 
 

@@ -1,6 +1,6 @@
 # Docs
 
-Thanks for using GRWiki! Here are contents of the docs:
+Thanks for using Nichey! Here are contents of the docs:
 
 - [The Wiki class](./language_models.md)
 - [Language Models](./language_models.md)

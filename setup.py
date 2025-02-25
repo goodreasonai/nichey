@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='grwiki',
+    name='nichey',
     version='0.0.1',
     packages=find_packages(),
     install_requires=[
@@ -23,11 +23,11 @@ setup(
     description='Build a wiki for your research topic',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
-    url='https://github.com/goodreasonai/wiki',
+    url='https://github.com/goodreasonai/nichey',
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.7',
 )

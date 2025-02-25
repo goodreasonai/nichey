@@ -1,4 +1,4 @@
-from grwiki import OpenAILM, ScrapeServ, Wiki, WebLink
+from nichey import OpenAILM, ScrapeServ, Wiki, WebLink
 
 """
 

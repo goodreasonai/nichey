@@ -1,4 +1,4 @@
-from grwiki import OpenAILM, Wiki
+from nichey import OpenAILM, Wiki
 
 OPENAI_API_KEY = "YOUR-API-KEY"
 topic = """I'm researching AI startups and want to understand their business models and what they do."""

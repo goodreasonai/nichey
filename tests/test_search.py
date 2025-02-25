@@ -1,4 +1,4 @@
-import grwiki as wiki
+import nichey as wiki
 from .secrets import BING_API_KEY
 
 def test_bing():

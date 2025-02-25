@@ -1,4 +1,4 @@
-from grwiki import OpenAILM, Bing, RequestsScraper, Wiki
+from nichey import OpenAILM, Bing, RequestsScraper, Wiki
 
 """
 

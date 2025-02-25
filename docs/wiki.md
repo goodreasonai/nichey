@@ -7,7 +7,7 @@ The wiki object is the heart of this project. A wiki stores its data in a sqlite
 A wiki object is intitialized and used like:
 
 ```python
-from grwiki import Wiki
+from nichey import wiki
 
 wiki = Wiki(topic="I'm researching...", title="", path=None, replace=False)
 ```

@@ -1,6 +1,6 @@
 # Examples
 
-This folder contains code examples of how to use GRWiki. 
+This folder contains code examples of how to use Nichey. 
 
 ## Contents
 

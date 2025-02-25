@@ -1,28 +1,28 @@
 
-# GRWiki
+# Nichey: Generate a wiki for your niche
 
-**Generate a wiki for your research topic, sourcing from the web and your docs**
+**Use LLMs to generate a wiki for your research topic, sourcing from the web and your docs**
 
-GRWiki is a python package that helps create and manage targeted wikis for a research topic you specify. After building a wiki, you can serve it locally on `localhost` or export the pages to markdown files.
+Nichey is a python package that helps create and manage targeted wikis for a research topic you specify. After building a wiki, you can serve it locally on `localhost` or export the pages to markdown files.
 
 If you like this project, please leave a star!
 
-Developers, feel free to create GUI wrappers around GRWiki and let us know about them!
+Developers, feel free to create GUI wrappers around Nichey and let us know about them!
 
 ![image](images/article.png)
 
 ## Installation
 
-Install GRWiki using pip:
+Install Nichey using pip:
 
 ```
-python3 -m pip install grwiki
+python3 -m pip install nichey
 ```
 
 And import it into your project like:
 
 ```
-import grwiki
+import nichey
 ```
 
 ## Usage
@@ -45,7 +45,7 @@ Afterward, you can update the wiki programatically or through the web interface.
 ### Example
 
 ```python
-from grwiki import OpenAILM, Bing, WebLink, RequestsScraper, ScrapeServ, Wiki
+from nichey import OpenAILM, Bing, WebLink, RequestsScraper, ScrapeServ, Wiki
 
 # Choose some topic for the wiki
 topic = """I'm researching the 2008 financial crisis. I want to get at the technical and in depth issues behind why it happened, the major players, and what ultimately came of it."""
@@ -106,7 +106,7 @@ wiki.serve()
 
 ## Contributing
 
-Please do look at the open issues and consider constributing! This software is completely free and open source. You can create your own GUI wrappers or contribute core API functionality. For dev environment setup, refer below. Otherwise, see [CONTRIUBTING.md](./CONTRIBUTING.md)
+Please do look at the open issues and consider constributing! This software is completely free and open source. You can create your own GUI wrappers or contribute core API functionality. For dev environment setup, refer below. For more information, see [CONTRIUBTING.md](./CONTRIBUTING.md)
 
 Make a virtual environment and install the dev dependencies:
 

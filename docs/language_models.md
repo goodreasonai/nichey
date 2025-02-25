@@ -1,6 +1,6 @@
 # Language Models
 
-This package supports all OpenAI API compatible language model APIs via the `grwiki.OpenAILM` class.
+This package supports all OpenAI API compatible language model APIs via the `nichey.OpenAILM` class.
 
 ## Initilization and Attributes
 
