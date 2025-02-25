@@ -766,7 +766,7 @@ class Wiki():
                 fhand.write(markdown)
 
 
-    def serve(self):
+    def serve(self, port=5000):
         app = Flask(__name__, static_folder='static')
 
         # Route to serve static files
@@ -883,4 +883,4 @@ class Wiki():
             self.delete_source_by_id(src.id)
             return jsonify({'message': 'success'})
         
-        app.run(port=5000, threaded=False)
+        app.run(port=port, threaded=False)

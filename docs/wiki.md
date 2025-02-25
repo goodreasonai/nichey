@@ -49,7 +49,7 @@ The articles are stored as markdown associated with each entity (1 to 1). Note t
 - `delete_source_by_id(self, id) -> None`: Self explanatory
 - `delete_entity_by_slug(self, slug) -> None:`: Self explanatory
 - `add_reference(self, entity_id, source_id)`: Adds a reference betwen an entity and a source. If using `write_article` or `write_articles`, this guarantees that a particular source will be used when writing the article for a given entity.
-
+- `deduplicate_entities(self, lm: LM, max_groups=None, group_size=100) -> int`: Uses a language model to deduplicate entities based on their titles. Note that it works by first ordering the sources alphabetically and going `group_size` entities at a time, so it may fail if the entities are far from each other alphabetically. It will process at most `max_groups` times `group_size` entities. Returns the number of removed entities.
 
 ### Inspecting
 
@@ -60,3 +60,8 @@ The articles are stored as markdown associated with each entity (1 to 1). Note t
 - `get_referenced_sources(self, entity_id, limit=1000, offset=0) -> list[Source]`: Returns all sources that are associated with a particular entity. It may return more sources than were explicitly referenced in the Entity's written page, since the references are created during extraction, not writing.
 - `get_source_by_id(self, id) -> Source:`: Returns an existing Source as a dataclass object from its ID
 - `search_sources_by_text(self, query) -> list[Source]`: Returns a list of Sources as dataclass objects using FTS5 full-text search. The search includes the title, author, description, and text of the source.
+
+### Using
+
+- `export(self, dir="output", remove_cross_refs=True, remove_source_refs=True)`: Exports each entity as a markdown file into a new folder (by default, "output"). If `remove_cross_refs` is `True`, then links to other wiki pages will be replaced with plain text. If `remove_source_refs` is `True`, then source references (like `[[@1]]`) will be removed.
+- `serve(self, port=5000)`: Makes a single threaded development server available on localhost at `port`. **You should not use this server in production.**
