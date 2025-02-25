@@ -5,3 +5,4 @@ venv
 user
 **/*.egg-info
 **/.pytest_cache
+dist

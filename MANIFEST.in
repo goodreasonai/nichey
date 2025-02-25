@@ -1,0 +1,7 @@
+include README.md
+include LICENSE
+recursive-include nichey *
+recursive-include nichey/static *
+recursive-exclude tests *
+recursive-exclude nichey/__pycache__ *
+global-exclude .DS_Store
