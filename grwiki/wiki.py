@@ -271,7 +271,6 @@ class Wiki():
         for i in tqdm(range(len(paths)), desc="Loading", total=len(paths)):
             path = paths[i]
             ext = get_ext_from_path(path)
-            logger.info(ext)
             loader = get_loader(ext, path)
             if not loader:
                 logger.warning(f"Couldn't process {path}; skipping.")
@@ -588,7 +587,6 @@ class Wiki():
         # ------------------------------------------------------------------------
         def replace_single_bracket_reference(m: Match) -> str:
             inside = m.group(1).strip()  # e.g. "@2" or "42"
-            print(inside)
             # If it starts with @, parse the numeric part
             if inside.startswith('@'):
                 num_str = inside[1:]

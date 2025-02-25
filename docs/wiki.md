@@ -12,8 +12,7 @@ from grwiki import Wiki
 wiki = Wiki(topic="I'm researching...", title="", path=None, replace=False)
 ```
 
-(self, topic: str, title=None, path=None, replace=False)
-- `topic` (mandatory): A string with a full explanation of your research goals with this wiki. This text will be passed to the language model when it writes articles and extracts entities.
+- `topic` (mandatory): A string with a full explanation of your research goals with this wiki. This text will be passed to the language model when it writes articles and extracts entities. It's good to be detailed here, and don't afraid to make this long.
 - `title` (optional): An optional title to give your wiki
 - `path` (optional, defaults to `wiki.sqlite`): where to store the wiki
 - `replace` (optional, defaults to `False`): whether the database in `path` should be added to or replaced (dangerous!)
@@ -32,16 +31,16 @@ The wiki class exposes functions to create the wiki.
 
 The pages in the wiki are referred to as entities.
 
-- `make_entities(self, lm: LM, max_sources=None) -> list[tuple[Source, list[Entity]]]`: Processes up to `max_sources` unprocessed sources (or all if `max_sources` is None), extracting from them entities (of type person, place, thing, etc.). Th Takes an LM object (like an OpenAILM) and uses a json schema. The entities created will not have the same title or slug as any other, but there may still be conceptual duplicates.
+- `make_entities(self, lm: LM, max_sources=None) -> list[tuple[Source, list[Entity]]]`: Processes up to `max_sources` unprocessed sources (or all if `max_sources` is None), extracting from them entities (of type person, place, thing, etc.). Takes an LM object (like an OpenAILM) and uses a json schema. The entities created will not have the same title or slug as any other, but there may still be conceptual duplicates.
 - `add_entity(self, title: str, type: str=None, desc: str=None, markdown: str=None) -> Entity`: Manually adds a new entity and returns it as a dataclass object, which will include its unique slug and ID. The `markdown` argument is its corresponding article, which can be left as None if it's unwritten.
 
 ### Writing Articles
 
 The articles are stored as markdown associated with each entity (1 to 1). Note that links to different pages in the wiki use Wikilink format, and references to sources are written like: `[[@25]]` where 25 is the ID of a source.
 
-- `write_articles(self, lm: LM, max_n=None, rewrite=False) -> list[Entity]`: Will write up to `max_n` articles (or all unwritten articles if None) using a language model `lm`. If `rewrite` is `True`, it will rewrite already written articles; otherwise, they will be skipped.
-- `write_article(self, lm: LM, entity_slug: str) -> Entity | None`: Writes an article for a specific entity from its slug, returning an Entity dataclass object
-- `heal_markdown(self, markdown: str) -> str`: Fixes common mistakes in the Markdown (such as not specifying cross links or references properly)
+- `write_articles(self, lm: LM, max_n=None, rewrite=False) -> list[Entity]`: Will write up to `max_n` articles (or all unwritten articles if None) using a language model `lm`. If `rewrite` is `True`, it will rewrite already written articles; otherwise, they will be skipped. Calls `write_article` for each entity.
+- `write_article(self, lm: LM, entity_slug: str) -> Entity | None`: Writes an article for a specific entity from its slug, returning an Entity dataclass object, or None if an error occurred. To see more about the error, [configure logging](./logging.md). This function uses references and full text search to find relevant sources (references are made when extracting entities, or when using `add_reference`).
+- `heal_markdown(self, markdown: str) -> str`: Fixes common mistakes in the Markdown (such as not specifying cross links or references properly). It is automatically called inside `write_article`.
 
 ### Editing
 

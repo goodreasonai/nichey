@@ -80,6 +80,10 @@ wiki = Wiki(topic=topic, title="Global Financial Crisis", path="gfc.db", replace
 # Then scrape sources and store them in the wiki:
 wiki.scrape_web_results(scraper, results)
 
+# Optional: Use local files as sources
+# paths = ["/path/to/file.pdf", "/path/to/file.docx"]
+# wiki.load_local_sources(paths)
+
 # This will extract entities from your sources, which will form the pages of the wiki
 wiki.make_entities(lm)
 

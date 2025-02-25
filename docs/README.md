@@ -7,6 +7,7 @@ Thanks for using GRWiki! Here are contents of the docs:
 - [Search Engines](./search_engines.md)
 - [Logging](./logging.md)
 - [Exceptions](./exceptions.md)
+- [File Loaders](./file_loaders.md)
 
 Code examples can be found [here](./examples)
 
