@@ -9,6 +9,12 @@ If you like this project, please leave a star!
 
 Developers, feel free to create GUI wrappers around GRWiki and let us know about them!
 
+<br/>
+<div align="center" style="display:flex;justify-content:center;margin: 2rem 0px;">
+<img alt="screenshot" height="250px" src="images/article.png" />
+</div>
+<br/>
+
 ## Installation
 
 Install GRWiki using pip:
