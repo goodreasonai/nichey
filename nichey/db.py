@@ -9,8 +9,6 @@ from .logger import logger
 
 DB_VERSION = 3  # Incremement when making changes to the schema to force auto migration
 
-ENTITY_TYPES = ["person", "place", "organization", "event", "publication", "law", "product", "object", "concept"]
-
 @dataclass
 class Source():
     title: str | None = None

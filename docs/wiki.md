@@ -9,13 +9,14 @@ A wiki object is intitialized and used like:
 ```python
 from nichey import wiki
 
-wiki = Wiki(topic="I'm researching...", title="", path=None, replace=False)
+wiki = Wiki(topic="I'm researching...", title="", path=None, replace=False, entity_types=None)
 ```
 
 - `topic` (mandatory): A string with a full explanation of your research goals with this wiki. This text will be passed to the language model when it writes articles and extracts entities. It's good to be detailed here, and don't afraid to make this long.
 - `title` (optional): An optional title to give your wiki
 - `path` (optional, defaults to `wiki.sqlite`): where to store the wiki
 - `replace` (optional, defaults to `False`): whether the database in `path` should be added to or replaced (dangerous!)
+- `entity_types` (optional): Determines the types of entities the LM will be prompted to create in `make_entities`. If `None`, defaults to: `["person", "place", "organization", "event", "publication", "law", "product", "object", "concept"]`.
 
 ## Functions
 
@@ -23,7 +24,7 @@ The wiki class exposes functions to create the wiki.
 
 ### Adding Sources
 
-- `scrape_web_results(self, scraper: Scraper, results: list[WebLink], max_n=None -> list[tuple[WebLink, Source | None]]`: Scrapes a maximum of `max_n` (infinity if None) `results` (given as `WebLink` objects) using a `scraper` of type `Scraper` (like a RequestsScraper) and stores them in the database. 
+- `scrape_web_results(self, scraper: Scraper, results: list[WebLink], max_n=None -> list[tuple[WebLink, Source | None]]`: Scrapes a maximum of `max_n` (infinity if None) `results` (given as `WebLink` objects) using a `scraper` of type `Scraper` (like a RequestsScraper) and stores them in the database. URLs that are already scraped will be skipped.
 - `load_local_sources(self, paths: list[str]) -> list[Source]`: Loads local files as sources
 -  `add_source(self, title: str, text: str, author: str=None, desc: str=None, url: str=None, snippet: str=None, query: str=None, search_engine: str=None, are_entities_extracted=False) -> Source`: Manually lets you add a source; you must provide a `title` and `text`, where `text` is the actual content of the source. All other arguments are optional metadata.
 

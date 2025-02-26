@@ -8,6 +8,7 @@ from unstructured.partition.odt import partition_odt
 from unstructured.partition.ppt import partition_ppt
 from unstructured.partition.pptx import partition_pptx
 from unstructured.partition.tsv import partition_tsv
+import re
 
 import warnings
 with warnings.catch_warnings():  # This rigamarol prevents these stupid SwigPy warnings caused by pymupdf
@@ -138,8 +139,18 @@ class DocxLoader(UnstructuredLoader):
 
 class HTMLLoader(UnstructuredLoader):
     def _get_elements(self):
-        return partition_html(filename=self.fname)
-
+        try:
+            return partition_html(filename=self.fname)
+        except AttributeError:
+            # This ridiculous bug is from unstructured; it breaks down if it sees "<?xml ... ?>"
+            existing = ""
+            with open(self.fname, "r") as fhand:
+                existing = fhand.read()
+            new_str = re.sub(r'<\?xml[^?]*\?>', '', existing)
+            with open(self.fname, 'w') as fhand:
+                fhand.write(new_str)
+            return partition_html(filename=self.fname)
+    
 
 class EpubLoader(UnstructuredLoader):
     def _get_elements(self):

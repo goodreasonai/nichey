@@ -1,4 +1,4 @@
-from .db import Source, Entity, PrimarySourceData, ScreenshotData, ENTITY_TYPES, Reference, obj_factory, migrate_db, DATACLASS_TO_TABLE, create_db
+from .db import Source, Entity, PrimarySourceData, ScreenshotData, Reference, obj_factory, migrate_db, DATACLASS_TO_TABLE, create_db
 from .scraper import Scraper, ScrapeResponse
 from .search_engine import WebLink
 from .file_loaders import get_loader, FileLoader, RawChunk, TextSplitter
@@ -24,9 +24,15 @@ class Wiki():
     topic: str
     path: str
     conn: sqlite3.Connection
-    def __init__(self, topic: str, title=None, path=None, replace=False):
+    def __init__(self, topic: str, title=None, path=None, replace=False, entity_types=None):
         self.title = title
         self.topic = topic
+        
+        if entity_types is None:
+            self.entity_types = ["person", "place", "organization", "event", "publication", "law", "product", "object", "concept"]
+        else:
+            self.entity_types = list(entity_types)
+
         if path is None:
             self.path = 'wiki.sqlite'
         else:
@@ -388,7 +394,7 @@ class Wiki():
                     intro = "You are tasked with extracting relevant entities from the given source material into JSON. Here is the text extracted from the source material:"
                     prompt_src_text = make_retrieval_prompt(lm, [text])
                     wiki = "Each entity will become a custom Wiki article that the user is constructing based on his research topic."
-                    type_req = f"The entities/pages can be the following types: {', '.join(ENTITY_TYPES)}"
+                    type_req = f"The entities/pages can be the following types: {', '.join(self.entity_types)}"
                     neg_req = f"You should not make entities for the following categories, which don't count: {', '.join(not_entities)}"
                     rel_req = "The user will provide the research topic. THE ENTITIES YOU EXTRACT MUST BE RELEVANT TO THE USER'S RESEARCH GOALS."
                     format_req = "Use the appropriate JSON schema. Here is an example for an extraction for research involving the history of Bell Labs. In this case, we're assuming that the source material mentioned John Bardeen."
@@ -407,7 +413,7 @@ class Wiki():
                     for ent in entities.entities:
                         ent: EntityData
 
-                        if ent.type not in ENTITY_TYPES:
+                        if ent.type not in self.entity_types:
                             logger.warning(f"Extracted type '{ent.type}' not recognized (title was '{ent.title}', source was '{src.title}')")
 
                         slug = slugify(ent.title, max_length=255)  # 255 is the max length of the slug text in the database... may want to standardize this somewhere.
