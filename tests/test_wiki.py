@@ -115,6 +115,11 @@ def test_scrape_web_results():
         assert(len(sources) == 1)
         sources = mywiki.search_sources_by_text("Gordon Kamer")
         assert(len(sources) == 1)
+
+        # Make sure duplicates aren't scraped
+        mywiki.scrape_web_results(scraper, results)
+        sources = mywiki.get_all_sources()
+        assert(len(sources) == 1)
     finally:
         os.remove(mywiki.path)
 

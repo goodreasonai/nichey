@@ -301,57 +301,62 @@ class Wiki():
         total = min(len(results), max_n) if max_n is not None else len(results)
         for i in tqdm(range(total), desc="Scraping", total=total):
             res = results[i]
-            resp: ScrapeResponse = scraper.scrape(res.url)
             new_source = None
-            if not resp.success:
-                logger.warning(f"Failed to scrape {res.url}; moving on.")
+            existing = self._match_rows(Source(url=res.url))
+            if existing and len(existing):
+                # Duplicate!
+                logger.info(f"Skipping duplicate URL {res.url}")
             else:
-                with resp.consume_data() as path:
-                    with resp.consume_screenshots() as (ss_paths, ss_mimetypes):
-                        ext = get_ext_from_mime_type(resp.metadata.content_type)
-                        loader: FileLoader = get_loader(ext, path)
-                        if not loader:
-                            logger.warning(f"Filetype '{resp.metadata.content_type}' cannot be parsed; moving along.")
-                        else:
-                            txt = ""
-                            splitter = TextSplitter()
-                            for chunk in loader.load_and_split(splitter):
-                                chunk: RawChunk
-                                txt += chunk.page_content
+                resp: ScrapeResponse = scraper.scrape(res.url)
+                if not resp.success:
+                    logger.warning(f"Failed to scrape {res.url}; moving on.")
+                else:
+                    with resp.consume_data() as path:
+                        with resp.consume_screenshots() as (ss_paths, ss_mimetypes):
+                            ext = get_ext_from_mime_type(resp.metadata.content_type)
+                            loader: FileLoader = get_loader(ext, path)
+                            if not loader:
+                                logger.warning(f"Filetype '{resp.metadata.content_type}' cannot be parsed; moving along.")
+                            else:
+                                txt = ""
+                                splitter = TextSplitter()
+                                for chunk in loader.load_and_split(splitter):
+                                    chunk: RawChunk
+                                    txt += chunk.page_content
 
-                            with open(path, 'rb') as f:
-                                file_data = f.read()
+                                with open(path, 'rb') as f:
+                                    file_data = f.read()
 
-                            new_source = Source(
-                                title=resp.metadata.title,
-                                text=txt,
-                                url=resp.url,
-                                snippet=res.snippet,
-                                query=res.query,
-                                search_engine=res.search_engine
-                            )
-                            new_source: Source = self._insert_row(new_source)
-
-                            primary_data = PrimarySourceData(
-                                mimetype=resp.metadata.content_type,
-                                data=file_data,
-                                source_id=new_source.id,
-                            )
-                            self._insert_row(primary_data)
-
-                            ss_paths: list[str]
-                            ss_mimetypes: list[str]
-                            for i, (ss_path, ss_mimetype) in enumerate(zip(ss_paths, ss_mimetypes)):
-                                with open(ss_path, 'rb') as f:
-                                    ss_data = f.read()
-                                
-                                screenshot = ScreenshotData(
-                                    mimetype=ss_mimetype,
-                                    data=ss_data,
-                                    source_id=new_source.id,
-                                    place=i
+                                new_source = Source(
+                                    title=resp.metadata.title,
+                                    text=txt,
+                                    url=resp.url,
+                                    snippet=res.snippet,
+                                    query=res.query,
+                                    search_engine=res.search_engine
                                 )
-                                self._insert_row(screenshot)
+                                new_source: Source = self._insert_row(new_source)
+
+                                primary_data = PrimarySourceData(
+                                    mimetype=resp.metadata.content_type,
+                                    data=file_data,
+                                    source_id=new_source.id,
+                                )
+                                self._insert_row(primary_data)
+
+                                ss_paths: list[str]
+                                ss_mimetypes: list[str]
+                                for i, (ss_path, ss_mimetype) in enumerate(zip(ss_paths, ss_mimetypes)):
+                                    with open(ss_path, 'rb') as f:
+                                        ss_data = f.read()
+                                    
+                                    screenshot = ScreenshotData(
+                                        mimetype=ss_mimetype,
+                                        data=ss_data,
+                                        source_id=new_source.id,
+                                        place=i
+                                    )
+                                    self._insert_row(screenshot)
             
             scraped.append((res, new_source))
         return scraped
