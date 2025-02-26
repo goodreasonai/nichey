@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='nichey',
-    version='0.0.3',
+    version='0.1.0',
     packages=find_packages(exclude=["tests", "tests.*"]),
     include_package_data=True,
     package_data={
