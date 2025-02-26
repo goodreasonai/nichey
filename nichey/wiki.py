@@ -236,7 +236,7 @@ class Wiki():
 
     def add_entity(self, title: str, type: str=None, desc: str=None, markdown: str=None) -> Entity:
         slug = slugify(title)
-        is_written = markdown is not None and len(markdown)
+        is_written = bool(markdown is not None and len(markdown))
         entity = Entity(slug=slug, title=title, type=type, desc=desc, markdown=markdown, is_written=is_written)
         entity = self._insert_row(entity)
         return entity
@@ -752,6 +752,7 @@ class Wiki():
         all_written_entities: list[Entity] = self._match_rows(Entity(is_written=True))
         if not os.path.exists(dir):
             os.mkdir(dir)
+        logger.debug(f"Exporting {len(all_written_entities)} entities")
         for ent in all_written_entities:
             fname = f"{ent.slug}.md"
             with open(os.path.join(dir, fname), 'w') as fhand:

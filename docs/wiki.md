@@ -24,7 +24,7 @@ The wiki class exposes functions to create the wiki.
 
 ### Adding Sources
 
-- `scrape_web_results(self, scraper: Scraper, results: list[WebLink], max_n=None -> list[tuple[WebLink, Source | None]]`: Scrapes a maximum of `max_n` (infinity if None) `results` (given as `WebLink` objects) using a `scraper` of type `Scraper` (like a RequestsScraper) and stores them in the database. URLs that are already scraped will be skipped.
+- `scrape_web_results(self, scraper: Scraper, results: list[WebLink], max_n: int=None) -> list[tuple[WebLink, Source | None]]`: Scrapes a maximum of `max_n` (infinity if None) `results` (given as `WebLink` objects) using a `scraper` of type `Scraper` (like a RequestsScraper) and stores them in the database. URLs that are already scraped will be skipped.
 - `load_local_sources(self, paths: list[str]) -> list[Source]`: Loads local files as sources
 -  `add_source(self, title: str, text: str, author: str=None, desc: str=None, url: str=None, snippet: str=None, query: str=None, search_engine: str=None, are_entities_extracted=False) -> Source`: Manually lets you add a source; you must provide a `title` and `text`, where `text` is the actual content of the source. All other arguments are optional metadata.
 
@@ -32,20 +32,20 @@ The wiki class exposes functions to create the wiki.
 
 The pages in the wiki are referred to as entities.
 
-- `make_entities(self, lm: LM, max_sources=None) -> list[tuple[Source, list[Entity]]]`: Processes up to `max_sources` unprocessed sources (or all if `max_sources` is None), extracting from them entities (of type person, place, thing, etc.). Takes an LM object (like an OpenAILM) and uses a json schema. The entities created will not have the same title or slug as any other, but there may still be conceptual duplicates.
-- `add_entity(self, title: str, type: str=None, desc: str=None, markdown: str=None) -> Entity`: Manually adds a new entity and returns it as a dataclass object, which will include its unique slug and ID. The `markdown` argument is its corresponding article, which can be left as None if it's unwritten.
+- `make_entities(self, lm: LM, max_sources=None) -> list[tuple[Source, list[Entity]]]`: Processes up to `max_sources` unprocessed sources (or all if `max_sources` is `None`), extracting from them entities (of type person, place, thing, etc.). Takes an LM object (like an OpenAILM) and uses a json schema. The entities created will not have the same title or slug as any other, but there may still be conceptual duplicates.
+- `add_entity(self, title: str, type: str=None, desc: str=None, markdown: str=None) -> Entity`: Manually adds a new entity and returns it as a dataclass object, which will include its unique slug and ID. The `markdown` argument is its corresponding article, which can be left as `None` if it's unwritten.
 
 ### Writing Articles
 
 The articles are stored as markdown associated with each entity (1 to 1). Note that links to different pages in the wiki use Wikilink format, and references to sources are written like: `[[@25]]` where 25 is the ID of a source.
 
 - `write_articles(self, lm: LM, max_n=None, rewrite=False) -> list[Entity]`: Will write up to `max_n` articles (or all unwritten articles if None) using a language model `lm`. If `rewrite` is `True`, it will rewrite already written articles; otherwise, they will be skipped. Calls `write_article` for each entity.
-- `write_article(self, lm: LM, entity_slug: str) -> Entity | None`: Writes an article for a specific entity from its slug, returning an Entity dataclass object, or None if an error occurred. To see more about the error, [configure logging](./logging.md). This function uses references and full text search to find relevant sources (references are made when extracting entities, or when using `add_reference`).
+- `write_article(self, lm: LM, entity_slug: str) -> Entity | None`: Writes an article for a specific entity from its slug, returning an Entity dataclass object, or `None` if an error occurred. To see debugging info, [configure logging](./logging.md). This function uses references and full text search to find relevant sources (references are made when extracting entities, or when using `add_reference`).
 - `heal_markdown(self, markdown: str) -> str`: Fixes common mistakes in the Markdown (such as not specifying cross links or references properly). It is automatically called inside `write_article`.
 
 ### Editing
 
-- `update_entity_by_slug(self, slug, title: str = None, type: str = None, desc: str = None, markdown: str=None) -> None`: Updates an entity based on the slug. Any options that are left as None won't be touched.
+- `update_entity_by_slug(self, slug, title: str = None, type: str = None, desc: str = None, markdown: str=None) -> None`: Updates an entity based on the slug to match the provided arguments. Any options that are left as `None` won't be touched.
 - `update_source_by_id(self, id, title: str = None, author: str = None, desc: str = None, url: str=None, snippet: str = None, query: str = None) -> None`: SAA except for sources identified by their ID
 - `delete_source_by_id(self, id) -> None`: Self explanatory
 - `delete_entity_by_slug(self, slug) -> None:`: Self explanatory

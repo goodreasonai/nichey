@@ -3,6 +3,7 @@ from .utils import get_tmp_path
 import os
 from .lm import get_lm
 from slugify import slugify
+import shutil
 
 
 def test_entities():
@@ -276,3 +277,23 @@ def test_deduplicate():
 
     finally:
         os.remove(mywiki.path)
+
+
+def test_export():
+    mywiki = wiki.Wiki(path=get_tmp_path(), topic="")
+    output_dir = get_tmp_path()
+    try:
+        title = "My Entity"
+        markdown = "Hello!"
+        mywiki.add_entity(title, markdown=markdown)
+        ent = mywiki.get_entity_by_slug(slug=slugify(title))
+        assert(ent)
+        assert(ent.is_written)
+        mywiki.export(dir=output_dir)
+        path = os.path.join(output_dir, f"{slugify(title)}.md")
+        with open(path, "r") as fhand:
+            assert(markdown == fhand.read())
+    finally:
+        os.remove(mywiki.path)
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
