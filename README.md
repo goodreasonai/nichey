@@ -3,11 +3,11 @@
 
 **Use LLMs to generate a wiki for your research topic, sourcing from the web and your docs**
 
-Nichey is a python package that helps create and manage targeted wikis for a research topic you specify. After building a wiki, you can serve it locally on `localhost` or export the pages to markdown files.
+Nichey is a python package that helps create and manage targeted wikis for a research topic you specify. Just like on Wikipedia, pages will contain links to other pages and to sources. After building your wiki, you can serve it locally on `localhost` or export the pages to markdown files.
 
 If you like this project, please leave a star!
 
-Developers, feel free to create GUI wrappers around Nichey and let us know about them!
+Nichey is free and open source software. Feel free to create your own GUI wrappers and make [contributions](#contributing).
 
 ![image](images/article.png)
 
@@ -100,7 +100,7 @@ wiki.write_articles(lm, max_n=5)
 # This will make the wiki available on localhost via a Flask server
 wiki.serve()
 
-# Optional: export to Markdown (with cross links and references removed)
+# Optional: export to Markdown (with wiki links and references removed by default)
 # wiki.export(dir="output")
 ```
 
