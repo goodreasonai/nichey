@@ -159,6 +159,18 @@ def test_local_sources():
         os.remove(mywiki.path)
 
 
+def test_split_pages():
+    mywiki = wiki.Wiki(path=get_tmp_path(), topic="")
+    try:
+        # Assuming that America Against America is 36 pages
+        paths = ['America Against America.pdf']
+        mywiki.load_local_sources(paths, split_pages=5)
+        results = mywiki.search_sources_by_text("America Against America")
+        assert(len(results) == 8)
+    finally:
+        os.remove(mywiki.path)
+
+
 def test_heal():
     """
     Would like to:
