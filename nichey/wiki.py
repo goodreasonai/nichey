@@ -17,6 +17,8 @@ from tqdm import tqdm
 import logging
 from typing import Match
 from .exceptions import EntityNotExists, SourceNotExists
+import fitz
+import tempfile
 
 
 class Wiki():
@@ -272,22 +274,44 @@ class Wiki():
         source = self._insert_row(source)
         return source
 
-    # TODO: allow breaking up by pages when supported
-    def load_local_sources(self, paths: list[str]) -> list[Source]:
+    def load_local_sources(self, paths: list[str], split_pages: int | None=None) -> list[Source]:
         for i in tqdm(range(len(paths)), desc="Loading", total=len(paths)):
-            path = paths[i]
-            ext = get_ext_from_path(path)
-            loader = get_loader(ext, path)
-            if not loader:
-                logger.warning(f"Couldn't process {path}; skipping.")
-            text = ""
-            for raw_chunk in loader.load_and_split(TextSplitter()):
-                raw_chunk: RawChunk
-                text += raw_chunk.page_content
-            src: Source = self.add_source(
-                title=get_filename_from_path(path),
-                text=text
-            )
+            paths_to_do = [(paths[i], get_filename_from_path(paths[i]))]  # Bit awkward - used if we're splitting up a path into multiple
+            ext = get_ext_from_path(paths[i])
+
+            if split_pages is not None:
+                if ext != 'pdf':
+                    logger.warning(f"Cannot split pages of non PDF document '{path}'; ignoring")
+                else:
+                    path = paths[i]
+                    pdf_doc = fitz.open(path)
+                    npages = len(pdf_doc)
+                    if split_pages <= npages:
+                        paths_to_do = []
+                        for k in range(0, npages, split_pages):
+                            # If pages are specified, split up the doc
+                            tmp = tempfile.NamedTemporaryFile(delete=False)
+                            new_pdf = fitz.open()  # Create a new empty PDF
+                            page_range = (k, min(npages, k+split_pages))
+                            new_pdf.insert_pdf(pdf_doc, from_page=page_range[0], to_page=page_range[1])
+                            new_pdf.save(tmp.name)
+                            new_pdf.close()
+                            paths_to_do.append((tmp.name, f'{get_filename_from_path(paths[i])}_{page_range[0]}-{page_range[1]}'))
+
+                    pdf_doc.close()
+
+            for path, title in paths_to_do:
+                loader = get_loader(ext, path)
+                if not loader:
+                    logger.warning(f"Couldn't process {path}; skipping.")
+                text = ""
+                for raw_chunk in loader.load_and_split(TextSplitter()):
+                    raw_chunk: RawChunk
+                    text += raw_chunk.page_content
+                src: Source = self.add_source(
+                    title=title,
+                    text=text
+                )
 
             data = None
             with open(path, 'rb') as fhand:
