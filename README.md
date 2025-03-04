@@ -1,6 +1,8 @@
 
 # Nichey: Generate a wiki for your niche
 
+![image](images/nichey.png)
+
 **Use LLMs to generate a wiki for your research topic, sourcing from the web and your docs**
 
 Nichey is a python package that helps create and manage targeted wikis for a research topic you specify. Just like on Wikipedia, pages will contain links to other pages and to sources. After building your wiki, you can serve it locally on `localhost` or export the pages to markdown files.
