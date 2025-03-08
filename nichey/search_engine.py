@@ -76,7 +76,7 @@ class Bing(SearchEngine):
             total = my_json['webPages']['totalEstimatedMatches']
             raw_results = my_json['webPages']['value']
         except:
-            logger.error(f"Could not get web pages from search engine. Here was the repsonse: {my_json}")
+            logger.error(f"Could not get web pages from search engine. Here was the response: {my_json}")
             return [], 0
         
         results = []
